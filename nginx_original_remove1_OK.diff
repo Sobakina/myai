@@ -1,0 +1,5 @@
+--- a/nginx_original.conf
++++ b/nginx_original.conf
+@@ -54,2 +54,2 @@
+ 	listen 95.140.154.68:443 ssl;
+-}1+}
