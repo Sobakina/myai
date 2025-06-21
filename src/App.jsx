@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+// import axios from 'axios';
 import {
   Container, Typography, Box, TextField, MenuItem, Button, Alert, Paper
 } from '@mui/material';
@@ -22,12 +22,12 @@ export default function App() {
   useEffect(() => {
     if (date) {
       // Получаем занятые и заблокированные времена
-      axios.get('https://lawback.3gx.ru/api/busy-times?date=' + date)
-        .then(res => setBusyTimes(res.data))
-        .catch(() => setBusyTimes([]));
-      axios.get('https://lawback.3gx.ru/api/blocks?date=' + date)
-        .then(res => setBlockedTimes(res.data.map(b => b.time.slice(0,5))))
-        .catch(() => setBlockedTimes([]));
+      // axios.get('https://lawback.3gx.ru/api/busy-times?date=' + date)
+      //   .then(res => setBusyTimes(res.data))
+      //   .catch(() => setBusyTimes([]));
+      // axios.get('https://lawback.3gx.ru/api/blocks?date=' + date)
+      //   .then(res => setBlockedTimes(res.data.map(b => b.time.slice(0,5))))
+      //   .catch(() => setBlockedTimes([]));
       setTime('');
     } else {
       setBusyTimes([]);
@@ -41,16 +41,16 @@ export default function App() {
     setError('');
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user || {};
     try {
-      await axios.post('https://lawback.3gx.ru/api/book', {
-        name,
-        phone,
-        date,
-        time,
-        tg_first_name: tgUser.first_name || '',
-        tg_last_name: tgUser.last_name || '',
-        tg_username: tgUser.username || '',
-        tg_id: tgUser.id || ''
-      });
+      // await axios.post('https://lawback.3gx.ru/api/book', {
+      //   name,
+      //   phone,
+      //   date,
+      //   time,
+      //   tg_first_name: tgUser.first_name || '',
+      //   tg_last_name: tgUser.last_name || '',
+      //   tg_username: tgUser.username || '',
+      //   tg_id: tgUser.id || ''
+      // });
       setSubmitted(true);
       setTime('');
       setName('');
