@@ -18,7 +18,7 @@ export default function NewAssistantPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-100 to-blue-100">
+    <div className="min-h-screen flex items-center justify-center">
       <AssistantForm onSubmit={handleSubmit} />
     </div>
   );
