@@ -1,10 +1,8 @@
-'use client'
+'use client';
 
-import React from "react";
 import { AssistantForm, AssistantFormValues } from "@/components/AssistantForm";
 
 export default function NewAssistantPage() {
-  // handleSubmit теперь только вызывает API-роут
   async function handleSubmit(data: AssistantFormValues) {
     const response = await fetch("/api/assistants", {
       method: "POST",
