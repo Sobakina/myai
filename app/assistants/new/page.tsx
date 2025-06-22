@@ -1,28 +1,22 @@
+'use client'
+
 import React from "react";
 import { AssistantForm, AssistantFormValues } from "@/components/AssistantForm";
-import { supabase } from "@/lib/supabaseClient";
-import { redirect } from "next/navigation";
 
 export default function NewAssistantPage() {
+  // handleSubmit теперь только вызывает API-роут
   async function handleSubmit(data: AssistantFormValues) {
-    "use server"; // Используем server action (App Router)
-    const userId = null; // TODO: подставить userId, если будет авторизация
-    const { data: inserted, error } = await supabase
-      .from("assistants")
-      .insert([
-        {
-          name: data.name,
-          description: data.description,
-          system_prompt: data.systemPrompt,
-          model: data.model,
-          owner_id: userId,
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) throw new Error(error.message);
-    redirect(`/assistants/${inserted.id}`);
+    const response = await fetch("/api/assistants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error("Ошибка создания ассистента: " + err);
+    }
+    const { id } = await response.json();
+    window.location.href = `/assistants/${id}`;
   }
 
   return (
