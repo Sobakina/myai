@@ -26,11 +26,11 @@ const models = [
 ];
 
 export function AssistantForm({ onSubmit }: { onSubmit: (data: AssistantFormValues) => void }) {
-  const { register, handleSubmit, formState } = useForm<AssistantFormValues>();
+  const { register, handleSubmit, formState, setValue } = useForm<AssistantFormValues>();
 
   return (
     <form
-      className="space-y-4 max-w-xl mx-auto bg-zinc-800/90 dark:bg-zinc-900/90 rounded-2xl shadow-xl p-8 mt-8"
+      className="space-y-4 max-w-xl mx-auto bg-zinc-900/90 dark:bg-zinc-900/90 rounded-2xl shadow-xl p-8 mt-8"
       onSubmit={handleSubmit(onSubmit)}
     >
       <h2 className="text-2xl font-bold mb-4 text-center text-zinc-400">Создание AI-ассистента</h2>
