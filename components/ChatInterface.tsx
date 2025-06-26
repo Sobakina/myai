@@ -85,14 +85,10 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      // Подготавливаем историю сообщений для API
-      // const apiMessages = [...messages, userMessage].map(msg => ({
-      //   role: msg.role,
-      //   content: msg.content
-      // }));
-      
-      // Пока передаем только текущее сообщение без истории
-      const apiMessages = [userMessage].map(msg => ({
+      // Подготавливаем историю сообщений для API (только последние 5 сообщений + текущее)
+      const allMessages = [...messages, userMessage];
+      const recentMessages = allMessages.slice(-5);
+      const apiMessages = recentMessages.map(msg => ({
         role: msg.role,
         content: msg.content
       }));
@@ -252,21 +248,35 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
               {speechError}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="flex space-x-3">
+          <form onSubmit={handleSubmit} className="flex flex-col space-y-3">
             <div className="flex-1 relative">
-              <input
-                type="text"
+              <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Напишите сообщение или нажмите на микрофон..."
-                className="w-full bg-zinc-800 text-white placeholder-zinc-400 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Пишите или нажмите на микрофон..."
+                className="w-full bg-zinc-800 text-white placeholder-zinc-400 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[48px] max-h-[200px] overflow-y-auto"
                 disabled={isLoading}
+                rows={1}
+                style={{
+                  height: 'auto'
+                }}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  target.style.height = 'auto';
+                  target.style.height = Math.min(target.scrollHeight, 200) + 'px';
+                }}
               />
+            </div>
+            <div className="flex space-x-3">
               {isSupported && (
                 <button
                   type="button"
-                  onClick={isListening ? stopListening : startListening}
-                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                  onMouseDown={() => !isLoading && startListening()}
+                  onMouseUp={stopListening}
+                  onMouseLeave={stopListening}
+                  onTouchStart={() => !isLoading && startListening()}
+                  onTouchEnd={stopListening}
+                  className={`px-4 py-3 rounded-xl font-medium transition-colors select-none ${
                     isListening 
                       ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse' 
                       : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
@@ -274,23 +284,24 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
                   disabled={isLoading}
                 >
                   <svg 
-                    className="w-4 h-4" 
+                    className="w-4 h-4 mr-2 inline" 
                     fill="currentColor" 
                     viewBox="0 0 24 24"
                   >
                     <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
                     <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                   </svg>
+                  {isListening ? 'Слушаю...' : 'Удерживайте'}
                 </button>
               )}
+              <button
+                type="submit"
+                disabled={!inputValue.trim() || isLoading}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium transition-colors"
+              >
+                Отправить
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={!inputValue.trim() || isLoading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium transition-colors"
-            >
-              Отправить
-            </button>
           </form>
         </div>
       </div>
