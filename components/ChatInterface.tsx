@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AssistantFormValues } from './AssistantForm';
 import { countTokens } from '@/lib/tokenCounter';
 import { calculateCost, formatCost } from '@/lib/pricing';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 
 export type Message = {
   id: string;
@@ -31,6 +32,15 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    isSupported,
+    error: speechError
+  } = useSpeechRecognition();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,6 +49,12 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (transcript) {
+      setInputValue(transcript);
+    }
+  }, [transcript]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,7 +188,7 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="flex flex-col h-[80vh] bg-zinc-950">
+    <div className="flex flex-col h-[97vh] bg-zinc-950">
       {/* Заголовок чата */}
       <div className="bg-zinc-900 border-b border-zinc-800 p-4">
         <div className="max-w-4xl mx-auto">
@@ -231,15 +247,43 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
       {/* Форма ввода сообщения */}
       <div className="bg-zinc-900 border-t border-zinc-800 p-4">
         <div className="max-w-4xl mx-auto">
+          {speechError && (
+            <div className="mb-2 text-red-400 text-sm text-center">
+              {speechError}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="flex space-x-3">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Напишите сообщение..."
-              className="flex-1 bg-zinc-800 text-white placeholder-zinc-400 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isLoading}
-            />
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="Напишите сообщение или нажмите на микрофон..."
+                className="w-full bg-zinc-800 text-white placeholder-zinc-400 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={isLoading}
+              />
+              {isSupported && (
+                <button
+                  type="button"
+                  onClick={isListening ? stopListening : startListening}
+                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                    isListening 
+                      ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse' 
+                      : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
+                  }`}
+                  disabled={isLoading}
+                >
+                  <svg 
+                    className="w-4 h-4" 
+                    fill="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
             <button
               type="submit"
               disabled={!inputValue.trim() || isLoading}

@@ -2,11 +2,19 @@ import { OpenAI } from 'openai';
 import { NextRequest } from 'next/server';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-build',
 });
 
 export async function POST(request: NextRequest) {
   try {
+    // Проверяем наличие API ключа в runtime
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy-key-for-build') {
+      return Response.json({ 
+        error: 'OpenAI API ключ не настроен', 
+        success: false 
+      }, { status: 500 });
+    }
+
     const { messages, systemPrompt } = await request.json();
 
     console.log('Chat request:', { 
