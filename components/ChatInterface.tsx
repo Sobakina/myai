@@ -2,12 +2,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AssistantFormValues } from './AssistantForm';
+import { countTokens } from '@/lib/tokenCounter';
+import { calculateCost, formatCost } from '@/lib/pricing';
 
 export type Message = {
   id: string;
   content: string;
   role: 'user' | 'assistant';
   timestamp: Date;
+  tokenCount?: number;
+  systemPromptTokens?: number; // Для сообщений пользователя
 };
 
 interface ChatInterfaceProps {
@@ -21,6 +25,7 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
       content: `Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`,
       role: 'assistant',
       timestamp: new Date(),
+      tokenCount: countTokens(`Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`),
     },
   ]);
   const [inputValue, setInputValue] = useState('');
@@ -44,15 +49,34 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
       content: inputValue,
       role: 'user',
       timestamp: new Date(),
+      tokenCount: countTokens(inputValue),
+      systemPromptTokens: countTokens(assistant.systemPrompt),
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsLoading(true);
 
+    // Создаем сообщение ассистента для стриминга
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      content: '',
+      role: 'assistant',
+      timestamp: new Date(),
+      tokenCount: 0,
+    };
+    setMessages(prev => [...prev, assistantMessage]);
+
     try {
       // Подготавливаем историю сообщений для API
-      const apiMessages = [...messages, userMessage].map(msg => ({
+      // const apiMessages = [...messages, userMessage].map(msg => ({
+      //   role: msg.role,
+      //   content: msg.content
+      // }));
+      
+      // Пока передаем только текущее сообщение без истории
+      const apiMessages = [userMessage].map(msg => ({
         role: msg.role,
         content: msg.content
       }));
@@ -68,28 +92,80 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
         }),
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Response error:', { status: response.status, text: errorText });
+        throw new Error(`API Error: ${response.status} - ${errorText}`);
+      }
 
-      if (data.success) {
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: data.message,
-          role: 'assistant',
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-      } else {
-        throw new Error(data.error);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') {
+                break;
+              }
+              
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg.id === assistantMessageId 
+                        ? { 
+                            ...msg, 
+                            content: msg.content + parsed.content,
+                            tokenCount: countTokens(msg.content + parsed.content)
+                          }
+                        : msg
+                    )
+                  );
+                } else if (parsed.tokens) {
+                  // Обновляем реальным количеством токенов от OpenAI
+                  setMessages(prev => 
+                    prev.map(msg => {
+                      if (msg.id === assistantMessageId) {
+                        return { ...msg, tokenCount: parsed.tokens.assistant };
+                      }
+                      // Обновляем последнее сообщение пользователя реальными токенами
+                      if (msg.role === 'user' && msg.id === userMessage.id) {
+                        return { 
+                          ...msg, 
+                          tokenCount: parsed.tokens.input - (parsed.tokens.systemPromptTokens || 0),
+                          systemPromptTokens: parsed.tokens.systemPromptTokens 
+                        };
+                      }
+                      return msg;
+                    })
+                  );
+                }
+              } catch (e) {
+                // Игнорируем ошибки парсинга
+              }
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Chat API error:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: 'Извините, произошла ошибка при обращении к AI. Попробуйте еще раз.',
-        role: 'assistant',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      const errorText = 'Извините, произошла ошибка при обращении к AI. Попробуйте еще раз.';
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === assistantMessageId 
+            ? { ...msg, content: errorText, tokenCount: countTokens(errorText) }
+            : msg
+        )
+      );
     } finally {
       setIsLoading(false);
     }
@@ -122,28 +198,32 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
                     : 'bg-zinc-800 text-zinc-100'
                 }`}
               >
-                <p className="text-sm">{message.content}</p>
-                <p className="text-xs mt-1 opacity-70">
-                  {message.timestamp.toLocaleTimeString('ru-RU', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                <p className="text-sm">
+                  {message.content}
+                  {message.role === 'assistant' && isLoading && message.content === '' && (
+                    <span className="inline-block w-2 h-4 bg-zinc-400 animate-pulse ml-1"></span>
+                  )}
                 </p>
+                <div className="flex justify-between items-center mt-1 text-xs opacity-70">
+                  <span>
+                    {message.timestamp.toLocaleTimeString('ru-RU', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <span className="ml-2">
+                    {message.role === 'user' 
+                      ? formatCost(
+                          calculateCost((message.tokenCount || 0) + (message.systemPromptTokens || 0), 'input')
+                        )
+                      : formatCost(calculateCost(message.tokenCount || 0, 'output'))
+                    }
+                  </span>
+                </div>
               </div>
             </div>
           ))}
           
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-zinc-800 text-zinc-100 max-w-xs lg:max-w-md px-4 py-3 rounded-2xl">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                </div>
-              </div>
-            </div>
-          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
