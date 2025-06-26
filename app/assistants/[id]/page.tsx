@@ -20,7 +20,7 @@ export default function AssistantChatPage() {
         console.error('Error parsing assistant data:', error);
       }
     }
-  }, [params.id]);
+  }, [params?.id]);
 
   if (!assistant) {
     return (
