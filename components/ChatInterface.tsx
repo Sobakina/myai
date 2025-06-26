@@ -149,7 +149,7 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
                     })
                   );
                 }
-              } catch (e) {
+              } catch {
                 // Игнорируем ошибки парсинга
               }
             }

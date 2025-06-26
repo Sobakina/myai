@@ -1,7 +1,6 @@
 'use client';
 
 import React from "react";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 
 export type AssistantFormValues = {
@@ -13,7 +12,6 @@ export type AssistantFormValues = {
 
 export function AssistantForm({ onSubmit }: { onSubmit: (data: AssistantFormValues) => void }) {
   const { register, handleSubmit, formState } = useForm<AssistantFormValues>();
-  const router = useRouter();
 
   const handleFormSubmit = (data: AssistantFormValues) => {
     // Сохраняем данные ассистента в localStorage перед вызовом onSubmit
