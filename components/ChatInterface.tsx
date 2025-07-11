@@ -5,6 +5,7 @@ import { AssistantFormValues } from './AssistantForm';
 import { countTokens } from '@/lib/tokenCounter';
 import { calculateCost, formatCost } from '@/lib/pricing';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { getUserFingerprint } from '@/lib/fingerprint';
 
 export type Message = {
   id: string;
@@ -12,25 +13,29 @@ export type Message = {
   role: 'user' | 'assistant';
   timestamp: Date;
   tokenCount?: number;
-  systemPromptTokens?: number; // Для сообщений пользователя
+  systemPromptTokens?: number;
 };
 
 interface ChatInterfaceProps {
   assistant: AssistantFormValues;
+  chatId?: string;
 }
 
-export function ChatInterface({ assistant }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      content: `Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`,
-      role: 'assistant',
-      timestamp: new Date(),
-      tokenCount: countTokens(`Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`),
-    },
-  ]);
+interface ChatData {
+  id: string;
+  user_fingerprint: string;
+  assistant_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(chatId || null);
+  const [userFingerprint, setUserFingerprint] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const {
@@ -56,6 +61,94 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
     }
   }, [transcript]);
 
+  useEffect(() => {
+    async function initializeChat() {
+      const fingerprint = await getUserFingerprint();
+      setUserFingerprint(fingerprint);
+      
+      if (currentChatId) {
+        await loadChatMessages(currentChatId);
+      } else {
+        await createNewChat(fingerprint);
+      }
+    }
+    
+    initializeChat();
+  }, [currentChatId]);
+
+  const loadChatMessages = async (chatId: string) => {
+    try {
+      const response = await fetch(`/api/chats/${chatId}/messages`);
+      if (response.ok) {
+        const chatMessages = await response.json();
+        const formattedMessages: Message[] = chatMessages.map((msg: any) => ({
+          id: msg.id,
+          content: msg.content,
+          role: msg.role,
+          timestamp: new Date(msg.created_at),
+          tokenCount: msg.token_count,
+          systemPromptTokens: msg.system_prompt_tokens,
+        }));
+        setMessages(formattedMessages);
+      }
+    } catch (error) {
+      console.error('Error loading chat messages:', error);
+    }
+  };
+
+  const createNewChat = async (fingerprint: string) => {
+    try {
+      const response = await fetch('/api/chats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userFingerprint: fingerprint,
+          assistantId: null,
+          title: `Чат с ${assistant.name}`,
+        }),
+      });
+      
+      if (response.ok) {
+        const newChat = await response.json();
+        setCurrentChatId(newChat.id);
+        
+        const welcomeMessage: Message = {
+          id: '1',
+          content: `Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`,
+          role: 'assistant',
+          timestamp: new Date(),
+          tokenCount: countTokens(`Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`),
+        };
+        
+        setMessages([welcomeMessage]);
+        await saveMessage(newChat.id, welcomeMessage);
+      }
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+    }
+  };
+
+  const saveMessage = async (chatId: string, message: Message) => {
+    try {
+      await fetch(`/api/chats/${chatId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: message.content,
+          role: message.role,
+          tokenCount: message.tokenCount,
+          systemPromptTokens: message.systemPromptTokens,
+        }),
+      });
+    } catch (error) {
+      console.error('Error saving message:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
@@ -73,7 +166,10 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
     setInputValue('');
     setIsLoading(true);
 
-    // Создаем сообщение ассистента для стриминга
+    if (currentChatId) {
+      await saveMessage(currentChatId, userMessage);
+    }
+
     const assistantMessageId = (Date.now() + 1).toString();
     const assistantMessage: Message = {
       id: assistantMessageId,
@@ -85,7 +181,6 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      // Подготавливаем историю сообщений для API (только последние 5 сообщений + текущее)
       const allMessages = [...messages, userMessage];
       const recentMessages = allMessages.slice(-5);
       const apiMessages = recentMessages.map(msg => ({
@@ -112,6 +207,7 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
+      let finalContent = '';
 
       if (reader) {
         while (true) {
@@ -131,6 +227,7 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.content) {
+                  finalContent += parsed.content;
                   setMessages(prev => 
                     prev.map(msg => 
                       msg.id === assistantMessageId 
@@ -143,13 +240,11 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
                     )
                   );
                 } else if (parsed.tokens) {
-                  // Обновляем реальным количеством токенов от OpenAI
                   setMessages(prev => 
                     prev.map(msg => {
                       if (msg.id === assistantMessageId) {
                         return { ...msg, tokenCount: parsed.tokens.assistant };
                       }
-                      // Обновляем последнее сообщение пользователя реальными токенами
                       if (msg.role === 'user' && msg.id === userMessage.id) {
                         return { 
                           ...msg, 
@@ -168,6 +263,17 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
           }
         }
       }
+      
+      if (currentChatId && finalContent) {
+        const finalAssistantMessage: Message = {
+          id: assistantMessageId,
+          content: finalContent,
+          role: 'assistant',
+          timestamp: new Date(),
+          tokenCount: countTokens(finalContent),
+        };
+        await saveMessage(currentChatId, finalAssistantMessage);
+      }
     } catch (error) {
       console.error('Chat API error:', error);
       const errorText = 'Извините, произошла ошибка при обращении к AI. Попробуйте еще раз.';
@@ -185,7 +291,6 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
 
   return (
     <div className="flex flex-col h-[97vh] bg-zinc-950">
-      {/* Заголовок чата */}
       <div className="bg-zinc-900 border-b border-zinc-800 p-4">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-xl font-bold text-white">{assistant.name}</h1>
@@ -193,7 +298,6 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
         </div>
       </div>
 
-      {/* Область сообщений */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-4xl mx-auto space-y-4">
           {messages.map((message) => (
@@ -240,7 +344,6 @@ export function ChatInterface({ assistant }: ChatInterfaceProps) {
         </div>
       </div>
 
-      {/* Форма ввода сообщения */}
       <div className="bg-zinc-900 border-t border-zinc-800 p-4">
         <div className="max-w-4xl mx-auto">
           {speechError && (
