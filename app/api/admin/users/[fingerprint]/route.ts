@@ -5,36 +5,36 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ fing
   try {
     const { fingerprint } = await params;
 
-    // Получаем все чаты пользователя
-    const { data: chats, error: chatsError } = await supabase
-      .from('chats')
-      .select('*')
-      .eq('user_fingerprint', fingerprint)
-      .order('updated_at', { ascending: false });
-
-    if (chatsError) {
-      return NextResponse.json({ error: chatsError }, { status: 400 });
-    }
-
-    if (!chats || chats.length === 0) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    const chatIds = chats.map(chat => chat.id);
-
-    // Получаем ВСЕ сообщения пользователя из всех чатов
+    // Получаем все сообщения пользователя
     const { data: allMessages, error: messagesError } = await supabase
       .from('messages')
-      .select('*, chats!inner(title)')
-      .in('chat_id', chatIds)
+      .select('*')
+      .eq('user_fingerprint', fingerprint)
       .order('created_at', { ascending: true });
 
     if (messagesError) {
       return NextResponse.json({ error: messagesError }, { status: 400 });
     }
 
+    if (!allMessages || allMessages.length === 0) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Получаем данные ассистентов
+    const { data: assistantsData, error: assistantsError } = await supabase
+      .from('assistants')
+      .select('id, name');
+
+    if (assistantsError) {
+      return NextResponse.json({ error: assistantsError }, { status: 400 });
+    }
+
+    // Создаем мапу ассистентов для быстрого поиска
+    const assistantsMap = new Map(assistantsData?.map(a => [a.id, a.name]) || []);
+
     // Группируем сообщения по ассистентам
     const assistantGroups: Record<string, {
+      assistantId: string;
       assistantName: string;
       totalMessages: number;
       totalUserMessages: number;
@@ -46,68 +46,62 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ fing
     }> = {};
 
     // Группируем сообщения по ассистентам
-    for (const chat of chats) {
-      const assistantName = chat.title.replace(/^Чат с\s+/, '') || 'Неизвестный ассистент';
-      const chatMessages = (allMessages || []).filter(msg => msg.chat_id === chat.id);
+    for (const message of allMessages) {
+      const assistantId = message.assistant_id;
+      const assistantName = assistantsMap.get(assistantId) || 'Неизвестный ассистент';
       
-      if (!assistantGroups[assistantName]) {
-        assistantGroups[assistantName] = {
+      if (!assistantGroups[assistantId]) {
+        assistantGroups[assistantId] = {
+          assistantId,
           assistantName,
           totalMessages: 0,
           totalUserMessages: 0,
           totalAssistantMessages: 0,
           totalTokens: 0,
-          firstSeen: chat.created_at,
-          lastSeen: chat.updated_at,
+          firstSeen: message.created_at,
+          lastSeen: message.created_at,
           messages: []
         };
       }
 
-      // Добавляем сообщения
-      assistantGroups[assistantName].messages.push(...chatMessages);
-      assistantGroups[assistantName].totalMessages += chatMessages.length;
-      assistantGroups[assistantName].totalUserMessages += chatMessages.filter(msg => msg.role === 'user').length;
-      assistantGroups[assistantName].totalAssistantMessages += chatMessages.filter(msg => msg.role === 'assistant').length;
-      assistantGroups[assistantName].totalTokens += chatMessages.reduce((sum, msg) => 
-        sum + (msg.token_count || 0) + (msg.system_prompt_tokens || 0), 0
-      );
+      // Добавляем сообщение
+      assistantGroups[assistantId].messages.push(message);
+      assistantGroups[assistantId].totalMessages++;
+      
+      if (message.role === 'user') {
+        assistantGroups[assistantId].totalUserMessages++;
+      } else if (message.role === 'assistant') {
+        assistantGroups[assistantId].totalAssistantMessages++;
+      }
+      
+      assistantGroups[assistantId].totalTokens += (message.token_count || 0) + (message.system_prompt_tokens || 0);
 
       // Обновляем даты
-      if (new Date(chat.created_at) < new Date(assistantGroups[assistantName].firstSeen)) {
-        assistantGroups[assistantName].firstSeen = chat.created_at;
+      if (new Date(message.created_at) < new Date(assistantGroups[assistantId].firstSeen)) {
+        assistantGroups[assistantId].firstSeen = message.created_at;
       }
-      if (new Date(chat.updated_at) > new Date(assistantGroups[assistantName].lastSeen)) {
-        assistantGroups[assistantName].lastSeen = chat.updated_at;
+      if (new Date(message.created_at) > new Date(assistantGroups[assistantId].lastSeen)) {
+        assistantGroups[assistantId].lastSeen = message.created_at;
       }
     }
 
-    // Сортируем сообщения в каждой группе по времени
-    Object.values(assistantGroups).forEach(group => {
-      group.messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    });
-
     // Общая статистика пользователя
-    const allMessagesFlat = Object.values(assistantGroups).flatMap(group => group.messages);
-    const userMessages = allMessagesFlat.filter(msg => msg.role === 'user');
-    const assistantMessages = allMessagesFlat.filter(msg => msg.role === 'assistant');
+    const userMessages = allMessages.filter(msg => msg.role === 'user');
+    const assistantMessages = allMessages.filter(msg => msg.role === 'assistant');
 
     const totalUserTokens = userMessages.reduce((sum, msg) => sum + (msg.token_count || 0), 0);
     const totalAssistantTokens = assistantMessages.reduce((sum, msg) => sum + (msg.token_count || 0), 0);
-    const totalSystemPromptTokens = allMessagesFlat.reduce((sum, msg) => sum + (msg.system_prompt_tokens || 0), 0);
+    const totalSystemPromptTokens = allMessages.reduce((sum, msg) => sum + (msg.system_prompt_tokens || 0), 0);
 
     const userStats = {
       fingerprint,
-      totalChats: chats.length,
-      totalMessages: allMessagesFlat.length,
+      totalConversations: Object.keys(assistantGroups).length,
+      totalMessages: allMessages.length,
       totalUserMessages: userMessages.length,
       totalAssistantMessages: assistantMessages.length,
       totalTokens: totalUserTokens + totalAssistantTokens + totalSystemPromptTokens,
-      firstSeen: chats.reduce((earliest, chat) => 
-        new Date(chat.created_at) < new Date(earliest.created_at) ? chat : earliest
-      ).created_at,
-      lastSeen: chats.reduce((latest, chat) => 
-        new Date(chat.updated_at) > new Date(latest.updated_at) ? chat : latest
-      ).updated_at
+      firstSeen: allMessages[0]?.created_at,
+      lastSeen: allMessages[allMessages.length - 1]?.created_at
     };
 
     return NextResponse.json({
