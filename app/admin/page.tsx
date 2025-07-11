@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface AdminStats {
   overview: {
@@ -135,16 +135,6 @@ export default function AdminPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  useEffect(() => {
-    if (currentView === 'stats') {
-      fetchStats();
-    } else if (currentView === 'assistants') {
-      fetchAssistants();
-    } else if (currentView === 'users') {
-      fetchUsers();
-    }
-  }, [currentView, currentPage, searchTerm]);
-
   const fetchStats = async () => {
     try {
       setLoading(true);
@@ -161,7 +151,7 @@ export default function AdminPage() {
     }
   };
 
-  const fetchAssistants = async () => {
+  const fetchAssistants = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -182,9 +172,9 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, searchTerm]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -205,7 +195,17 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, searchTerm]);
+
+  useEffect(() => {
+    if (currentView === 'stats') {
+      fetchStats();
+    } else if (currentView === 'assistants') {
+      fetchAssistants();
+    } else if (currentView === 'users') {
+      fetchUsers();
+    }
+  }, [currentView, currentPage, searchTerm, fetchAssistants, fetchUsers]);
 
 
   const fetchAssistantDetails = async (assistantName: string) => {
@@ -518,7 +518,9 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {assistants.map((assistant) => (
+                  {assistants
+                    .sort((a, b) => new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime())
+                    .map((assistant) => (
                     <tr key={assistant.assistantName} className="border-t border-zinc-600 hover:bg-zinc-700">
                       <td className="p-4 font-semibold">{assistant.assistantName}</td>
                       <td className="p-4">{assistant.chatCount}</td>
@@ -610,7 +612,9 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
+                  {users
+                    .sort((a, b) => new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime())
+                    .map((user) => (
                     <tr key={user.fingerprint} className="border-t border-zinc-600 hover:bg-zinc-700">
                       <td className="p-4 font-mono text-sm">{user.fingerprint.slice(0, 4)}...</td>
                       <td className="p-4">{user.chatCount}</td>
