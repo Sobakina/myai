@@ -1,12 +1,13 @@
 import { supabase } from '@/lib/supabaseClient';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest, { params }: { params: { chatId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }) {
   try {
+    const { chatId } = await params;
     const { data, error } = await supabase
       .from('messages')
       .select('*')
-      .eq('chat_id', params.chatId)
+      .eq('chat_id', chatId)
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -19,8 +20,9 @@ export async function GET(req: NextRequest, { params }: { params: { chatId: stri
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { chatId: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }) {
   try {
+    const { chatId } = await params;
     const body = await req.json();
     const { content, role, tokenCount, systemPromptTokens } = body;
 
@@ -34,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
       .from('messages')
       .insert([
         {
-          chat_id: params.chatId,
+          chat_id: chatId,
           content,
           role,
           token_count: tokenCount || 0,
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
     await supabase
       .from('chats')
       .update({ updated_at: new Date().toISOString() })
-      .eq('id', params.chatId);
+      .eq('id', chatId);
 
     return NextResponse.json(data);
   } catch (err) {

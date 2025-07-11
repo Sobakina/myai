@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AssistantFormValues } from './AssistantForm';
 import { countTokens } from '@/lib/tokenCounter';
 import { calculateCost, formatCost } from '@/lib/pricing';
@@ -21,21 +21,11 @@ interface ChatInterfaceProps {
   chatId?: string;
 }
 
-interface ChatData {
-  id: string;
-  user_fingerprint: string;
-  assistant_id: string;
-  title: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(chatId || null);
-  const [userFingerprint, setUserFingerprint] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const {
@@ -61,42 +51,7 @@ export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
     }
   }, [transcript]);
 
-  useEffect(() => {
-    async function initializeChat() {
-      const fingerprint = await getUserFingerprint();
-      setUserFingerprint(fingerprint);
-      
-      if (currentChatId) {
-        await loadChatMessages(currentChatId);
-      } else {
-        await createNewChat(fingerprint);
-      }
-    }
-    
-    initializeChat();
-  }, [currentChatId]);
-
-  const loadChatMessages = async (chatId: string) => {
-    try {
-      const response = await fetch(`/api/chats/${chatId}/messages`);
-      if (response.ok) {
-        const chatMessages = await response.json();
-        const formattedMessages: Message[] = chatMessages.map((msg: any) => ({
-          id: msg.id,
-          content: msg.content,
-          role: msg.role,
-          timestamp: new Date(msg.created_at),
-          tokenCount: msg.token_count,
-          systemPromptTokens: msg.system_prompt_tokens,
-        }));
-        setMessages(formattedMessages);
-      }
-    } catch (error) {
-      console.error('Error loading chat messages:', error);
-    }
-  };
-
-  const createNewChat = async (fingerprint: string) => {
+  const createNewChat = useCallback(async (fingerprint: string) => {
     try {
       const response = await fetch('/api/chats', {
         method: 'POST',
@@ -127,6 +82,47 @@ export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
       }
     } catch (error) {
       console.error('Error creating new chat:', error);
+    }
+  }, [assistant.name, assistant.description]);
+
+  useEffect(() => {
+    async function initializeChat() {
+      const fingerprint = await getUserFingerprint();
+      
+      if (currentChatId) {
+        await loadChatMessages(currentChatId);
+      } else {
+        await createNewChat(fingerprint);
+      }
+    }
+    
+    initializeChat();
+  }, [currentChatId, createNewChat]);
+
+  const loadChatMessages = async (chatId: string) => {
+    try {
+      const response = await fetch(`/api/chats/${chatId}/messages`);
+      if (response.ok) {
+        const chatMessages = await response.json();
+        const formattedMessages: Message[] = chatMessages.map((msg: {
+          id: string;
+          content: string;
+          role: 'user' | 'assistant';
+          created_at: string;
+          token_count?: number;
+          system_prompt_tokens?: number;
+        }) => ({
+          id: msg.id,
+          content: msg.content,
+          role: msg.role,
+          timestamp: new Date(msg.created_at),
+          tokenCount: msg.token_count,
+          systemPromptTokens: msg.system_prompt_tokens,
+        }));
+        setMessages(formattedMessages);
+      }
+    } catch (error) {
+      console.error('Error loading chat messages:', error);
     }
   };
 
