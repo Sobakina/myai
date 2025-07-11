@@ -3,26 +3,22 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // Общая статистика чатов
-    const { data: chatsData, error: chatsError } = await supabase
-      .from('chats')
-      .select('id, created_at, updated_at');
-
-    if (chatsError) {
-      return NextResponse.json({ error: chatsError }, { status: 400 });
-    }
-
-    // Общая статистика сообщений
+    // Общая статистика сообщений (теперь без чатов)
     const { data: messagesData, error: messagesError } = await supabase
       .from('messages')
-      .select('id, role, token_count, system_prompt_tokens, created_at, chat_id');
+      .select('id, role, token_count, system_prompt_tokens, created_at, assistant_id, user_fingerprint');
 
     if (messagesError) {
       return NextResponse.json({ error: messagesError }, { status: 400 });
     }
 
-    // Подсчет статистики
-    const totalChats = chatsData?.length || 0;
+    // Подсчет уникальных "чатов" (комбинаций assistant_id + user_fingerprint)
+    const uniqueConversations = new Set();
+    messagesData?.forEach(msg => {
+      uniqueConversations.add(`${msg.assistant_id}-${msg.user_fingerprint}`);
+    });
+
+    const totalConversations = uniqueConversations.size;
     const totalMessages = messagesData?.length || 0;
     
     const userMessages = messagesData?.filter(msg => msg.role === 'user') || [];
@@ -41,41 +37,49 @@ export async function GET() {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const dateStr = date.toISOString().split('T')[0];
       
-      const dayChats = chatsData?.filter(chat => 
-        chat.created_at.startsWith(dateStr)
-      ).length || 0;
-      
       const dayMessages = messagesData?.filter(msg => 
         msg.created_at.startsWith(dateStr)
       ).length || 0;
+
+      // Подсчет уникальных разговоров за день
+      const dayConversations = new Set();
+      messagesData?.filter(msg => msg.created_at.startsWith(dateStr))
+        .forEach(msg => {
+          dayConversations.add(`${msg.assistant_id}-${msg.user_fingerprint}`);
+        });
       
       dailyStats.push({
         date: dateStr,
-        chats: dayChats,
+        conversations: dayConversations.size,
         messages: dayMessages
       });
     }
 
-    // Топ активных чатов
-    const chatActivity: Record<string, number> = {};
+    // Топ активных разговоров (assistant_id + user_fingerprint)
+    const conversationActivity: Record<string, number> = {};
     messagesData?.forEach(msg => {
-      if (!chatActivity[msg.chat_id]) {
-        chatActivity[msg.chat_id] = 0;
+      const conversationKey = `${msg.assistant_id}-${msg.user_fingerprint}`;
+      if (!conversationActivity[conversationKey]) {
+        conversationActivity[conversationKey] = 0;
       }
-      chatActivity[msg.chat_id]++;
+      conversationActivity[conversationKey]++;
     });
 
-    const topChats = Object.entries(chatActivity)
+    const topConversations = Object.entries(conversationActivity)
       .sort(([,a], [,b]) => (b as number) - (a as number))
       .slice(0, 10)
-      .map(([chatId, messageCount]) => ({
-        chatId,
-        messageCount: messageCount as number
-      }));
+      .map(([conversationKey, messageCount]) => {
+        const [assistantId, userFingerprint] = conversationKey.split('-');
+        return {
+          assistantId,
+          userFingerprint,
+          messageCount: messageCount as number
+        };
+      });
 
     const stats = {
       overview: {
-        totalChats,
+        totalConversations,
         totalMessages,
         totalUserMessages: userMessages.length,
         totalAssistantMessages: assistantMessages.length,
@@ -85,11 +89,17 @@ export async function GET() {
         totalTokens: totalUserTokens + totalAssistantTokens + totalSystemPromptTokens
       },
       dailyStats,
-      topChats,
+      topConversations,
       recentActivity: {
-        chatsLastWeek: chatsData?.filter(chat => 
-          new Date(chat.created_at) >= sevenDaysAgo
-        ).length || 0,
+        conversationsLastWeek: (() => {
+          const weekConversations = new Set();
+          messagesData?.filter(msg => 
+            new Date(msg.created_at) >= sevenDaysAgo
+          ).forEach(msg => {
+            weekConversations.add(`${msg.assistant_id}-${msg.user_fingerprint}`);
+          });
+          return weekConversations.size;
+        })(),
         messagesLastWeek: messagesData?.filter(msg => 
           new Date(msg.created_at) >= sevenDaysAgo
         ).length || 0

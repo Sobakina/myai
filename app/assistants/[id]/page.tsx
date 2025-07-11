@@ -1,37 +1,49 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { ChatInterface } from '@/components/ChatInterface';
-import { AssistantFormValues } from '@/components/AssistantForm';
+import { useParams, useRouter } from 'next/navigation';
+import { getUserFingerprint } from '@/lib/fingerprint';
 
-export default function AssistantChatPage() {
+export default function AssistantRedirectPage() {
   const params = useParams();
-  const [assistant, setAssistant] = useState<AssistantFormValues | null>(null);
+  const router = useRouter();
+  const [isRedirecting, setIsRedirecting] = useState(true);
 
   useEffect(() => {
-    // Получаем данные ассистента из localStorage
-    const assistantData = localStorage.getItem('currentAssistant');
-    if (assistantData) {
+    async function redirectToUserChat() {
       try {
-        const parsedAssistant = JSON.parse(assistantData);
-        setAssistant(parsedAssistant);
+        const fingerprint = await getUserFingerprint();
+        const assistantId = params?.id as string;
+        
+        // Перенаправляем на новый маршрут с fingerprint
+        router.replace(`/assistants/${assistantId}/${fingerprint}`);
       } catch (error) {
-        console.error('Error parsing assistant data:', error);
+        console.error('Error getting fingerprint:', error);
+        setIsRedirecting(false);
       }
     }
-  }, [params?.id]);
 
-  if (!assistant) {
+    if (params?.id) {
+      redirectToUserChat();
+    }
+  }, [params?.id, router]);
+
+  if (isRedirecting) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-zinc-950">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-zinc-400">Загрузка ассистента...</p>
+          <p className="text-zinc-400">Перенаправление...</p>
         </div>
       </div>
     );
   }
 
-  return <ChatInterface assistant={assistant} />;
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-zinc-950">
+      <div className="text-center">
+        <p className="text-red-400">Ошибка перенаправления</p>
+      </div>
+    </div>
+  );
 }

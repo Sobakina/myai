@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 interface AdminStats {
   overview: {
-    totalChats: number;
+    totalConversations: number;
     totalMessages: number;
     totalUserMessages: number;
     totalAssistantMessages: number;
@@ -15,15 +15,16 @@ interface AdminStats {
   };
   dailyStats: {
     date: string;
-    chats: number;
+    conversations: number;
     messages: number;
   }[];
-  topChats: {
-    chatId: string;
+  topConversations: {
+    assistantId: string;
+    userFingerprint: string;
     messageCount: number;
   }[];
   recentActivity: {
-    chatsLastWeek: number;
+    conversationsLastWeek: number;
     messagesLastWeek: number;
   };
 }
@@ -31,7 +32,8 @@ interface AdminStats {
 
 interface User {
   fingerprint: string;
-  chatCount: number;
+  conversationCount: number;
+  assistantCount: number;
   firstSeen: string;
   lastSeen: string;
   totalMessages: number;
@@ -39,8 +41,9 @@ interface User {
 }
 
 interface Assistant {
+  assistantId: string;
   assistantName: string;
-  chatCount: number;
+  conversationCount: number;
   userCount: number;
   totalMessages: number;
   totalTokens: number;
@@ -58,7 +61,7 @@ interface Assistant {
 interface AssistantDetails {
   assistantStats: {
     assistantName: string;
-    totalChats: number;
+    totalConversations: number;
     totalUsers: number;
     totalMessages: number;
     totalUserMessages: number;
@@ -82,7 +85,7 @@ interface AssistantDetails {
       token_count: number;
       system_prompt_tokens: number;
       created_at: string;
-      chat_id: string;
+      assistant_id: string;
       user_fingerprint: string;
     }[];
   }[];
@@ -91,7 +94,7 @@ interface AssistantDetails {
 interface UserDetails {
   userStats: {
     fingerprint: string;
-    totalChats: number;
+    totalConversations: number;
     totalMessages: number;
     totalUserMessages: number;
     totalAssistantMessages: number;
@@ -100,6 +103,7 @@ interface UserDetails {
     lastSeen: string;
   };
   assistants: {
+    assistantId: string;
     assistantName: string;
     totalMessages: number;
     totalUserMessages: number;
@@ -114,7 +118,8 @@ interface UserDetails {
       token_count: number;
       system_prompt_tokens: number;
       created_at: string;
-      chat_id: string;
+      assistant_id: string;
+      user_fingerprint: string;
     }[];
   }[];
 }
@@ -371,8 +376,8 @@ export default function AdminPage() {
             {/* Общая статистика */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <div className="bg-zinc-800 p-6 rounded-lg">
-                <h3 className="text-lg font-semibold mb-2">Всего чатов</h3>
-                <p className="text-3xl font-bold text-blue-400">{stats.overview.totalChats}</p>
+                <h3 className="text-lg font-semibold mb-2">Всего разговоров</h3>
+                <p className="text-3xl font-bold text-blue-400">{stats.overview.totalConversations}</p>
               </div>
               <div className="bg-zinc-800 p-6 rounded-lg">
                 <h3 className="text-lg font-semibold mb-2">Всего сообщений</h3>
@@ -385,7 +390,7 @@ export default function AdminPage() {
               <div className="bg-zinc-800 p-6 rounded-lg">
                 <h3 className="text-lg font-semibold mb-2">Активность (неделя)</h3>
                 <p className="text-xl font-bold text-orange-400">
-                  {stats.recentActivity.chatsLastWeek} чатов
+                  {stats.recentActivity.conversationsLastWeek} разговоров
                 </p>
                 <p className="text-sm text-zinc-400">
                   {stats.recentActivity.messagesLastWeek} сообщений
@@ -423,14 +428,14 @@ export default function AdminPage() {
               </div>
 
               <div className="bg-zinc-800 p-6 rounded-lg">
-                <h3 className="text-xl font-semibold mb-4">Топ активных чатов</h3>
+                <h3 className="text-xl font-semibold mb-4">Топ активных разговоров</h3>
                 <div className="space-y-2">
-                  {stats.topChats.slice(0, 8).map((chat, index) => (
-                    <div key={chat.chatId} className="flex justify-between items-center">
+                  {stats.topConversations.slice(0, 8).map((conversation, index) => (
+                    <div key={`${conversation.assistantId}-${conversation.userFingerprint}`} className="flex justify-between items-center">
                       <span className="text-zinc-300">
-                        #{index + 1} {chat.chatId.slice(0, 8)}...
+                        #{index + 1} {conversation.assistantId.slice(0, 8)}... / {conversation.userFingerprint.slice(0, 4)}...
                       </span>
-                      <span className="font-semibold">{chat.messageCount} сообщений</span>
+                      <span className="font-semibold">{conversation.messageCount} сообщений</span>
                     </div>
                   ))}
                 </div>
@@ -451,11 +456,11 @@ export default function AdminPage() {
                             <div 
                               className="bg-blue-500 h-4 rounded" 
                               style={{ 
-                                width: `${Math.min(100, (day.chats / Math.max(...stats.dailyStats.map(d => d.chats))) * 100)}%` 
+                                width: `${Math.min(100, (day.conversations / Math.max(...stats.dailyStats.map(d => d.conversations))) * 100)}%` 
                               }}
                             ></div>
                           </div>
-                          <span className="text-xs text-zinc-400">Чаты: {day.chats}</span>
+                          <span className="text-xs text-zinc-400">Разговоры: {day.conversations}</span>
                         </div>
                         <div className="flex-1">
                           <div className="bg-zinc-600 h-4 rounded">
@@ -508,7 +513,7 @@ export default function AdminPage() {
                 <thead className="bg-zinc-700">
                   <tr>
                     <th className="text-left p-4">Ассистент</th>
-                    <th className="text-left p-4">Чатов</th>
+                    <th className="text-left p-4">Разговоров</th>
                     <th className="text-left p-4">Пользователей</th>
                     <th className="text-left p-4">Сообщений</th>
                     <th className="text-left p-4">Токенов</th>
@@ -523,7 +528,7 @@ export default function AdminPage() {
                     .map((assistant) => (
                     <tr key={assistant.assistantName} className="border-t border-zinc-600 hover:bg-zinc-700">
                       <td className="p-4 font-semibold">{assistant.assistantName}</td>
-                      <td className="p-4">{assistant.chatCount}</td>
+                      <td className="p-4">{assistant.conversationCount}</td>
                       <td className="p-4">{assistant.userCount}</td>
                       <td className="p-4">{assistant.totalMessages}</td>
                       <td className="p-4">{assistant.totalTokens.toLocaleString()}</td>
@@ -603,7 +608,7 @@ export default function AdminPage() {
                 <thead className="bg-zinc-700">
                   <tr>
                     <th className="text-left p-4">Fingerprint</th>
-                    <th className="text-left p-4">Чатов</th>
+                    <th className="text-left p-4">Разговоров</th>
                     <th className="text-left p-4">Сообщений</th>
                     <th className="text-left p-4">Токенов</th>
                     <th className="text-left p-4">Первое посещение</th>
@@ -617,7 +622,7 @@ export default function AdminPage() {
                     .map((user) => (
                     <tr key={user.fingerprint} className="border-t border-zinc-600 hover:bg-zinc-700">
                       <td className="p-4 font-mono text-sm">{user.fingerprint.slice(0, 4)}...</td>
-                      <td className="p-4">{user.chatCount}</td>
+                      <td className="p-4">{user.conversationCount}</td>
                       <td className="p-4">{user.totalMessages}</td>
                       <td className="p-4">{user.totalTokens.toLocaleString()}</td>
                       <td className="p-4 text-sm text-zinc-400">
@@ -677,8 +682,8 @@ export default function AdminPage() {
                   <p className="font-mono text-sm">{selectedUser.userStats.fingerprint.slice(0, 4)}...</p>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-400">Всего чатов</p>
-                  <p className="text-lg font-bold">{selectedUser.userStats.totalChats}</p>
+                  <p className="text-sm text-zinc-400">Всего разговоров</p>
+                  <p className="text-lg font-bold">{selectedUser.userStats.totalConversations}</p>
                 </div>
                 <div>
                   <p className="text-sm text-zinc-400">Первое посещение</p>
@@ -829,8 +834,8 @@ export default function AdminPage() {
               <h2 className="text-2xl font-bold mb-4">Ассистент {selectedAssistant.assistantStats.assistantName}</h2>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-sm text-zinc-400">Всего чатов</p>
-                  <p className="text-lg font-bold">{selectedAssistant.assistantStats.totalChats}</p>
+                  <p className="text-sm text-zinc-400">Всего разговоров</p>
+                  <p className="text-lg font-bold">{selectedAssistant.assistantStats.totalConversations}</p>
                 </div>
                 <div>
                   <p className="text-sm text-zinc-400">Пользователей</p>

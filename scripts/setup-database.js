@@ -19,16 +19,16 @@ async function setupDatabase() {
   try {
     console.log('Setting up database schema...');
     
-    // Проверяем существование таблицы chats
-    console.log('Checking if chats table exists...');
-    const { error: chatsError } = await supabase
-      .from('chats')
+    // Проверяем существование таблицы messages
+    console.log('Checking if messages table exists...');
+    const { error: messagesError } = await supabase
+      .from('messages')
       .select('id')
       .limit(1);
     
-    if (chatsError && (chatsError.code === 'PGRST116' || chatsError.message.includes('does not exist'))) {
+    if (messagesError && (messagesError.code === 'PGRST116' || messagesError.message.includes('does not exist'))) {
       // Таблица не существует
-      console.log('Table chats does not exist, need to create via Supabase Dashboard');
+      console.log('Table messages does not exist, need to create via Supabase Dashboard');
       console.log('\nPlease execute the following SQL in your Supabase Dashboard:');
       console.log('https://supa.3gx.ru/project/default/sql');
       console.log('\n--- Copy and execute this SQL ---');
@@ -39,9 +39,9 @@ async function setupDatabase() {
       console.log('--- End of SQL ---\n');
       
       return;
-    } else if (chatsError) {
-      console.error('Unexpected error checking chats table:', chatsError);
-      throw chatsError;
+    } else if (messagesError) {
+      console.error('Unexpected error checking messages table:', messagesError);
+      throw messagesError;
     }
     
     console.log('Tables already exist or database setup completed!');

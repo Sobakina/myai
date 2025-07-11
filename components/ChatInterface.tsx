@@ -18,14 +18,17 @@ export type Message = {
 
 interface ChatInterfaceProps {
   assistant: AssistantFormValues;
-  chatId?: string;
+  assistantId: string;
+  userFingerprint: string;
+  chatId?: string; // deprecated, kept for backward compatibility
 }
 
-export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
+export function ChatInterface({ assistant, assistantId, userFingerprint, chatId }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentChatId, setCurrentChatId] = useState<string | null>(chatId || null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const {
@@ -51,84 +54,69 @@ export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
     }
   }, [transcript]);
 
-  const createNewChat = useCallback(async (fingerprint: string) => {
-    try {
-      const response = await fetch('/api/chats', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userFingerprint: fingerprint,
-          assistantId: null,
-          title: `Чат с ${assistant.name}`,
-        }),
-      });
-      
-      if (response.ok) {
-        const newChat = await response.json();
-        setCurrentChatId(newChat.id);
-        
-        const welcomeMessage: Message = {
-          id: '1',
-          content: `Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`,
-          role: 'assistant',
-          timestamp: new Date(),
-          tokenCount: countTokens(`Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`),
-        };
-        
-        setMessages([welcomeMessage]);
-        await saveMessage(newChat.id, welcomeMessage);
-      }
-    } catch (error) {
-      console.error('Error creating new chat:', error);
-    }
-  }, [assistant.name, assistant.description]);
-
-  useEffect(() => {
-    async function initializeChat() {
-      const fingerprint = await getUserFingerprint();
-      
-      if (currentChatId) {
-        await loadChatMessages(currentChatId);
-      } else {
-        await createNewChat(fingerprint);
-      }
-    }
+  const initializeChat = useCallback(async () => {
+    if (isInitializing || isInitialized) return;
     
-    initializeChat();
-  }, [currentChatId, createNewChat]);
-
-  const loadChatMessages = async (chatId: string) => {
+    setIsInitializing(true);
     try {
-      const response = await fetch(`/api/chats/${chatId}/messages`);
+      // Загружаем существующие сообщения
+      const response = await fetch(`/api/assistants/${assistantId}/${userFingerprint}`);
+      
       if (response.ok) {
         const chatMessages = await response.json();
-        const formattedMessages: Message[] = chatMessages.map((msg: {
-          id: string;
-          content: string;
-          role: 'user' | 'assistant';
-          created_at: string;
-          token_count?: number;
-          system_prompt_tokens?: number;
-        }) => ({
-          id: msg.id,
-          content: msg.content,
-          role: msg.role,
-          timestamp: new Date(msg.created_at),
-          tokenCount: msg.token_count,
-          systemPromptTokens: msg.system_prompt_tokens,
-        }));
-        setMessages(formattedMessages);
+        
+        if (chatMessages.length === 0) {
+          // Если сообщений нет, показываем приветственное сообщение только в UI (не сохраняем в БД)
+          const welcomeContent = `Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`;
+          const welcomeMessage: Message = {
+            id: `welcome-ui-only`,
+            content: welcomeContent,
+            role: 'assistant',
+            timestamp: new Date(),
+            tokenCount: countTokens(welcomeContent),
+          };
+          
+          setMessages([welcomeMessage]);
+        } else {
+          // Если сообщения есть, отображаем их
+          const formattedMessages: Message[] = chatMessages.map((msg: {
+            id: string;
+            content: string;
+            role: 'user' | 'assistant';
+            created_at: string;
+            token_count?: number;
+            system_prompt_tokens?: number;
+          }) => ({
+            id: msg.id,
+            content: msg.content,
+            role: msg.role,
+            timestamp: new Date(msg.created_at),
+            tokenCount: msg.token_count,
+            systemPromptTokens: msg.system_prompt_tokens,
+          }));
+          setMessages(formattedMessages);
+        }
       }
+      
+      setIsInitialized(true);
     } catch (error) {
-      console.error('Error loading chat messages:', error);
+      console.error('Error initializing chat:', error);
+      setIsInitialized(true);
+    } finally {
+      setIsInitializing(false);
     }
-  };
+  }, [assistant.name, assistant.description, assistantId, userFingerprint]);
 
-  const saveMessage = async (chatId: string, message: Message) => {
+  useEffect(() => {
+    if (!isInitialized && !isInitializing) {
+      initializeChat();
+    }
+  }, [assistantId, userFingerprint]); // Инициализируем только при смене ассистента или пользователя
+
+
+  const saveMessage = async (message: Message) => {
     try {
-      await fetch(`/api/chats/${chatId}/messages`, {
+      const response = await fetch(`/api/assistants/${assistantId}/${userFingerprint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,8 +128,27 @@ export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
           systemPromptTokens: message.systemPromptTokens,
         }),
       });
+      
+      // Если получили ошибку дублирования, просто игнорируем её
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Проверяем, является ли это ошибкой уникальности
+        if (errorText.includes('duplicate') || errorText.includes('unique') || errorText.includes('already exists')) {
+          console.log('Message already exists, skipping save');
+          return;
+        }
+        throw new Error(`Failed to save message: ${errorText}`);
+      }
     } catch (error) {
-      console.error('Error saving message:', error);
+      // Игнорируем ошибки дублирования, логируем остальные
+      if (error instanceof Error && 
+          (error.message.includes('duplicate') || 
+           error.message.includes('unique') || 
+           error.message.includes('already exists'))) {
+        console.log('Message already exists, skipping save');
+      } else {
+        console.error('Error saving message:', error);
+      }
     }
   };
 
@@ -162,9 +169,7 @@ export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
     setInputValue('');
     setIsLoading(true);
 
-    if (currentChatId) {
-      await saveMessage(currentChatId, userMessage);
-    }
+    await saveMessage(userMessage);
 
     const assistantMessageId = (Date.now() + 1).toString();
     const assistantMessage: Message = {
@@ -177,7 +182,9 @@ export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      const allMessages = [...messages, userMessage];
+      // Фильтруем UI-only сообщения для отправки в API
+      const realMessages = messages.filter(msg => msg.id !== 'welcome-ui-only');
+      const allMessages = [...realMessages, userMessage];
       const recentMessages = allMessages.slice(-5);
       const apiMessages = recentMessages.map(msg => ({
         role: msg.role,
@@ -260,7 +267,7 @@ export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
         }
       }
       
-      if (currentChatId && finalContent) {
+      if (finalContent) {
         const finalAssistantMessage: Message = {
           id: assistantMessageId,
           content: finalContent,
@@ -268,7 +275,7 @@ export function ChatInterface({ assistant, chatId }: ChatInterfaceProps) {
           timestamp: new Date(),
           tokenCount: countTokens(finalContent),
         };
-        await saveMessage(currentChatId, finalAssistantMessage);
+        await saveMessage(finalAssistantMessage);
       }
     } catch (error) {
       console.error('Chat API error:', error);

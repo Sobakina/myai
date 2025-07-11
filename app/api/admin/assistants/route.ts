@@ -10,19 +10,32 @@ export async function GET(req: NextRequest) {
 
     const offset = (page - 1) * limit;
 
-    // Получаем все чаты
-    const { data: allChats, error: chatsError } = await supabase
-      .from('chats')
+    // Получаем все сообщения
+    const { data: allMessages, error: messagesError } = await supabase
+      .from('messages')
       .select('*');
 
-    if (chatsError) {
-      return NextResponse.json({ error: chatsError }, { status: 400 });
+    if (messagesError) {
+      return NextResponse.json({ error: messagesError }, { status: 400 });
     }
 
-    // Группируем чаты по названию ассистента (извлекаем из title)
+    // Получаем данные ассистентов
+    const { data: assistantsData, error: assistantsError } = await supabase
+      .from('assistants')
+      .select('id, name');
+
+    if (assistantsError) {
+      return NextResponse.json({ error: assistantsError }, { status: 400 });
+    }
+
+    // Создаем мапу ассистентов для быстрого поиска
+    const assistantsMap = new Map(assistantsData?.map(a => [a.id, a.name]) || []);
+
+    // Группируем сообщения по ассистентам
     const assistantGroups: Record<string, {
+      assistantId: string;
       assistantName: string;
-      chatCount: number;
+      conversationCount: number;
       userCount: number;
       totalMessages: number;
       totalTokens: number;
@@ -37,76 +50,67 @@ export async function GET(req: NextRequest) {
       }>;
     }> = {};
 
-    // Получаем статистику сообщений для всех чатов
-    for (const chat of allChats || []) {
-      // Извлекаем имя ассистента из title чата (например, "Чат с Claude" -> "Claude")
-      const assistantName = chat.title.replace(/^Чат с\s+/, '') || 'Неизвестный ассистент';
+    // Обрабатываем все сообщения
+    for (const message of allMessages || []) {
+      const assistantId = message.assistant_id;
+      const assistantName = assistantsMap.get(assistantId) || 'Неизвестный ассистент';
       
-      if (!assistantGroups[assistantName]) {
-        assistantGroups[assistantName] = {
+      if (!assistantGroups[assistantId]) {
+        assistantGroups[assistantId] = {
+          assistantId,
           assistantName,
-          chatCount: 0,
+          conversationCount: 0,
           userCount: 0,
           totalMessages: 0,
           totalTokens: 0,
-          firstSeen: chat.created_at,
-          lastSeen: chat.updated_at,
+          firstSeen: message.created_at,
+          lastSeen: message.created_at,
           users: {}
         };
       }
 
-      assistantGroups[assistantName].chatCount++;
-
       // Обновляем даты
-      if (new Date(chat.created_at) < new Date(assistantGroups[assistantName].firstSeen)) {
-        assistantGroups[assistantName].firstSeen = chat.created_at;
+      if (new Date(message.created_at) < new Date(assistantGroups[assistantId].firstSeen)) {
+        assistantGroups[assistantId].firstSeen = message.created_at;
       }
-      if (new Date(chat.updated_at) > new Date(assistantGroups[assistantName].lastSeen)) {
-        assistantGroups[assistantName].lastSeen = chat.updated_at;
+      if (new Date(message.created_at) > new Date(assistantGroups[assistantId].lastSeen)) {
+        assistantGroups[assistantId].lastSeen = message.created_at;
       }
 
       // Группируем пользователей внутри ассистента
-      const fingerprint = chat.user_fingerprint;
-      if (!assistantGroups[assistantName].users[fingerprint]) {
-        assistantGroups[assistantName].users[fingerprint] = {
+      const fingerprint = message.user_fingerprint;
+      if (!assistantGroups[assistantId].users[fingerprint]) {
+        assistantGroups[assistantId].users[fingerprint] = {
           fingerprint,
           totalMessages: 0,
           totalTokens: 0,
-          firstSeen: chat.created_at,
-          lastSeen: chat.updated_at
+          firstSeen: message.created_at,
+          lastSeen: message.created_at
         };
       }
 
       // Обновляем даты пользователя
-      if (new Date(chat.created_at) < new Date(assistantGroups[assistantName].users[fingerprint].firstSeen)) {
-        assistantGroups[assistantName].users[fingerprint].firstSeen = chat.created_at;
+      if (new Date(message.created_at) < new Date(assistantGroups[assistantId].users[fingerprint].firstSeen)) {
+        assistantGroups[assistantId].users[fingerprint].firstSeen = message.created_at;
       }
-      if (new Date(chat.updated_at) > new Date(assistantGroups[assistantName].users[fingerprint].lastSeen)) {
-        assistantGroups[assistantName].users[fingerprint].lastSeen = chat.updated_at;
+      if (new Date(message.created_at) > new Date(assistantGroups[assistantId].users[fingerprint].lastSeen)) {
+        assistantGroups[assistantId].users[fingerprint].lastSeen = message.created_at;
       }
 
-      // Получаем статистику сообщений для чата
-      const { data: messages } = await supabase
-        .from('messages')
-        .select('token_count, system_prompt_tokens')
-        .eq('chat_id', chat.id);
-
-      if (messages) {
-        const chatTokens = messages.reduce((sum, msg) => 
-          sum + (msg.token_count || 0) + (msg.system_prompt_tokens || 0), 0
-        );
-        
-        assistantGroups[assistantName].totalMessages += messages.length;
-        assistantGroups[assistantName].totalTokens += chatTokens;
-        
-        assistantGroups[assistantName].users[fingerprint].totalMessages += messages.length;
-        assistantGroups[assistantName].users[fingerprint].totalTokens += chatTokens;
-      }
+      // Подсчитываем токены и сообщения
+      const messageTokens = (message.token_count || 0) + (message.system_prompt_tokens || 0);
+      
+      assistantGroups[assistantId].totalMessages++;
+      assistantGroups[assistantId].totalTokens += messageTokens;
+      
+      assistantGroups[assistantId].users[fingerprint].totalMessages++;
+      assistantGroups[assistantId].users[fingerprint].totalTokens += messageTokens;
     }
 
-    // Подсчитываем количество уникальных пользователей для каждого ассистента
-    Object.keys(assistantGroups).forEach(assistantName => {
-      assistantGroups[assistantName].userCount = Object.keys(assistantGroups[assistantName].users).length;
+    // Подсчитываем количество уникальных пользователей и разговоров для каждого ассистента
+    Object.keys(assistantGroups).forEach(assistantId => {
+      assistantGroups[assistantId].userCount = Object.keys(assistantGroups[assistantId].users).length;
+      assistantGroups[assistantId].conversationCount = Object.keys(assistantGroups[assistantId].users).length;
     });
 
     // Преобразуем в массив и применяем поиск

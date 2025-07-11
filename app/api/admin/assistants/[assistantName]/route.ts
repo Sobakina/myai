@@ -6,39 +6,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ assi
     const { assistantName } = await params;
     const decodedAssistantName = decodeURIComponent(assistantName);
 
-    // Получаем все чаты данного ассистента
-    const { data: chats, error: chatsError } = await supabase
-      .from('chats')
-      .select('*')
-      .ilike('title', `%${decodedAssistantName}%`)
-      .order('updated_at', { ascending: false });
+    // Найдем ассистента по имени
+    const { data: assistantData, error: assistantError } = await supabase
+      .from('assistants')
+      .select('id, name')
+      .ilike('name', decodedAssistantName)
+      .single();
 
-    if (chatsError) {
-      return NextResponse.json({ error: chatsError }, { status: 400 });
-    }
-
-    if (!chats || chats.length === 0) {
+    if (assistantError || !assistantData) {
       return NextResponse.json({ error: 'Assistant not found' }, { status: 404 });
     }
 
-    const chatIds = chats.map(chat => chat.id);
-
-    // Получаем ВСЕ сообщения всех чатов ассистента
+    // Получаем все сообщения данного ассистента
     const { data: allMessages, error: messagesError } = await supabase
       .from('messages')
-      .select('*, chats!inner(title, user_fingerprint)')
-      .in('chat_id', chatIds)
+      .select('*')
+      .eq('assistant_id', assistantData.id)
       .order('created_at', { ascending: true });
 
     if (messagesError) {
       return NextResponse.json({ error: messagesError }, { status: 400 });
     }
-
-    // Обогащаем сообщения информацией о пользователе
-    const enrichedMessages = (allMessages || []).map(msg => ({
-      ...msg,
-      user_fingerprint: (msg as { chats?: { user_fingerprint?: string } }).chats?.user_fingerprint || 'unknown'
-    }));
 
     // Группируем по пользователям
     const userGroups: Record<string, {
@@ -49,11 +37,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ assi
       totalTokens: number;
       firstSeen: string;
       lastSeen: string;
-      messages: typeof enrichedMessages;
+      messages: typeof allMessages;
     }> = {};
 
     // Добавляем сообщения к соответствующим пользователям
-    enrichedMessages.forEach(msg => {
+    (allMessages || []).forEach(msg => {
       const fingerprint = msg.user_fingerprint;
       if (!userGroups[fingerprint]) {
         userGroups[fingerprint] = {
@@ -90,21 +78,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ assi
 
     // Общая статистика ассистента
     const assistantStats = {
-      assistantName: decodedAssistantName,
-      totalChats: chats.length,
+      assistantName: assistantData.name,
+      totalConversations: Object.keys(userGroups).length,
       totalUsers: Object.keys(userGroups).length,
-      totalMessages: enrichedMessages.length,
-      totalUserMessages: enrichedMessages.filter(msg => msg.role === 'user').length,
-      totalAssistantMessages: enrichedMessages.filter(msg => msg.role === 'assistant').length,
-      totalTokens: enrichedMessages.reduce((sum, msg) => 
+      totalMessages: allMessages?.length || 0,
+      totalUserMessages: (allMessages || []).filter(msg => msg.role === 'user').length,
+      totalAssistantMessages: (allMessages || []).filter(msg => msg.role === 'assistant').length,
+      totalTokens: (allMessages || []).reduce((sum, msg) => 
         sum + (msg.token_count || 0) + (msg.system_prompt_tokens || 0), 0
       ),
-      firstSeen: chats.reduce((earliest, chat) => 
-        new Date(chat.created_at) < new Date(earliest.created_at) ? chat : earliest
-      ).created_at,
-      lastSeen: chats.reduce((latest, chat) => 
-        new Date(chat.updated_at) > new Date(latest.updated_at) ? chat : latest
-      ).updated_at
+      firstSeen: allMessages?.[0]?.created_at || new Date().toISOString(),
+      lastSeen: allMessages?.[allMessages.length - 1]?.created_at || new Date().toISOString()
     };
 
     return NextResponse.json({

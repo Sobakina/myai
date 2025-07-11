@@ -10,16 +10,12 @@ export async function GET(req: NextRequest) {
 
     const offset = (page - 1) * limit;
 
-    // Получаем всех пользователей (группировка по fingerprint)
+    // Получаем все сообщения для группировки по пользователям
     let query = supabase
-      .from('chats')
-      .select('user_fingerprint, created_at, updated_at');
+      .from('messages')
+      .select('user_fingerprint, assistant_id, created_at, token_count, system_prompt_tokens');
 
-    if (search) {
-      query = query.ilike('user_fingerprint', `%${search}%`);
-    }
-
-    const { data: allChats, error } = await query;
+    const { data: allMessages, error } = await query;
 
     if (error) {
       return NextResponse.json({ error }, { status: 400 });
@@ -28,68 +24,70 @@ export async function GET(req: NextRequest) {
     // Группируем по fingerprint
     const userGroups: Record<string, {
       fingerprint: string;
-      chatCount: number;
+      conversationCount: number;
+      assistantCount: number;
       firstSeen: string;
       lastSeen: string;
       totalMessages: number;
       totalTokens: number;
+      assistants: Set<string>;
     }> = {};
 
     // Получаем статистику для каждого пользователя
-    for (const chat of allChats || []) {
-      const fingerprint = chat.user_fingerprint;
+    for (const message of allMessages || []) {
+      const fingerprint = message.user_fingerprint;
       
       if (!userGroups[fingerprint]) {
         userGroups[fingerprint] = {
           fingerprint,
-          chatCount: 0,
-          firstSeen: chat.created_at,
-          lastSeen: chat.updated_at,
+          conversationCount: 0,
+          assistantCount: 0,
+          firstSeen: message.created_at,
+          lastSeen: message.created_at,
           totalMessages: 0,
-          totalTokens: 0
+          totalTokens: 0,
+          assistants: new Set()
         };
       }
 
-      userGroups[fingerprint].chatCount++;
+      userGroups[fingerprint].totalMessages++;
+      userGroups[fingerprint].totalTokens += (message.token_count || 0) + (message.system_prompt_tokens || 0);
+      userGroups[fingerprint].assistants.add(message.assistant_id);
       
       // Обновляем даты
-      if (new Date(chat.created_at) < new Date(userGroups[fingerprint].firstSeen)) {
-        userGroups[fingerprint].firstSeen = chat.created_at;
+      if (new Date(message.created_at) < new Date(userGroups[fingerprint].firstSeen)) {
+        userGroups[fingerprint].firstSeen = message.created_at;
       }
-      if (new Date(chat.updated_at) > new Date(userGroups[fingerprint].lastSeen)) {
-        userGroups[fingerprint].lastSeen = chat.updated_at;
-      }
-    }
-
-    // Получаем статистику сообщений для каждого пользователя
-    for (const fingerprint of Object.keys(userGroups)) {
-      // Получаем все чаты пользователя
-      const { data: userChats } = await supabase
-        .from('chats')
-        .select('id')
-        .eq('user_fingerprint', fingerprint);
-
-      if (userChats) {
-        const chatIds = userChats.map(chat => chat.id);
-        
-        // Получаем статистику сообщений
-        const { data: messages } = await supabase
-          .from('messages')
-          .select('token_count, system_prompt_tokens')
-          .in('chat_id', chatIds);
-
-        if (messages) {
-          userGroups[fingerprint].totalMessages = messages.length;
-          userGroups[fingerprint].totalTokens = messages.reduce((sum, msg) => 
-            sum + (msg.token_count || 0) + (msg.system_prompt_tokens || 0), 0
-          );
-        }
+      if (new Date(message.created_at) > new Date(userGroups[fingerprint].lastSeen)) {
+        userGroups[fingerprint].lastSeen = message.created_at;
       }
     }
 
-    // Преобразуем в массив и сортируем
-    const users = Object.values(userGroups)
-      .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
+    // Подсчитываем количество разговоров и ассистентов
+    Object.keys(userGroups).forEach(fingerprint => {
+      userGroups[fingerprint].assistantCount = userGroups[fingerprint].assistants.size;
+      userGroups[fingerprint].conversationCount = userGroups[fingerprint].assistants.size; // Каждый ассистент = один разговор с этим пользователем
+    });
+
+    // Преобразуем в массив и применяем поиск
+    let users = Object.values(userGroups).map(group => ({
+      fingerprint: group.fingerprint,
+      conversationCount: group.conversationCount,
+      assistantCount: group.assistantCount,
+      firstSeen: group.firstSeen,
+      lastSeen: group.lastSeen,
+      totalMessages: group.totalMessages,
+      totalTokens: group.totalTokens
+    }));
+
+    if (search) {
+      users = users.filter(user => 
+        user.fingerprint.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+
+    // Сортируем по последней активности
+    users.sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
 
     // Применяем пагинацию
     const paginatedUsers = users.slice(offset, offset + limit);
