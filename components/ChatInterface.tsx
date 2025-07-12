@@ -73,37 +73,23 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
       if (response.ok) {
         const chatMessages = await response.json();
         
-        if (chatMessages.length === 0) {
-          // Если сообщений нет, показываем приветственное сообщение только в UI (не сохраняем в БД)
-          const welcomeContent = `Привет! Я ${assistant.name}. ${assistant.description}. Чем могу помочь?`;
-          const welcomeMessage: Message = {
-            id: `welcome-ui-only`,
-            content: welcomeContent,
-            role: 'assistant',
-            timestamp: new Date(),
-            tokenCount: countTokens(welcomeContent),
-          };
-          
-          setMessages([welcomeMessage]);
-        } else {
-          // Если сообщения есть, отображаем их
-          const formattedMessages: Message[] = chatMessages.map((msg: {
-            id: string;
-            content: string;
-            role: 'user' | 'assistant';
-            created_at: string;
-            token_count?: number;
-            system_prompt_tokens?: number;
-          }) => ({
-            id: msg.id,
-            content: msg.content,
-            role: msg.role,
-            timestamp: new Date(msg.created_at),
-            tokenCount: msg.token_count,
-            systemPromptTokens: msg.system_prompt_tokens,
-          }));
-          setMessages(formattedMessages);
-        }
+        // Отображаем сообщения (или пустой массив если их нет)
+        const formattedMessages: Message[] = chatMessages.map((msg: {
+          id: string;
+          content: string;
+          role: 'user' | 'assistant';
+          created_at: string;
+          token_count?: number;
+          system_prompt_tokens?: number;
+        }) => ({
+          id: msg.id,
+          content: msg.content,
+          role: msg.role,
+          timestamp: new Date(msg.created_at),
+          tokenCount: msg.token_count,
+          systemPromptTokens: msg.system_prompt_tokens,
+        }));
+        setMessages(formattedMessages);
       }
       
       setIsInitialized(true);
@@ -113,7 +99,7 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
     } finally {
       setIsInitializing(false);
     }
-  }, [assistant.name, assistant.description, assistantId, userFingerprint, isInitialized, isInitializing]);
+  }, [assistantId, userFingerprint, isInitialized, isInitializing]);
 
   // Сбрасываем состояние при смене ассистента или пользователя
   useEffect(() => {
