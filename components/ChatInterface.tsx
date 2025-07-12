@@ -30,6 +30,7 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const {
@@ -43,6 +44,26 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleShare = async () => {
+    try {
+      const shareUrl = `${window.location.origin}/assistants/${assistantId}`;
+      await navigator.clipboard.writeText(shareUrl);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      // Fallback для старых браузеров
+      const textArea = document.createElement('textarea');
+      textArea.value = `${window.location.origin}/assistants/${assistantId}`;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 2000);
+    }
   };
 
   useEffect(() => {
@@ -319,8 +340,29 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
     <div className="flex flex-col h-[97vh] bg-zinc-950">
       <div className="bg-zinc-900 border-b border-zinc-800 p-4">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-xl font-bold text-white">{assistant.name}</h1>
-          <p className="text-zinc-400 text-sm">{assistant.description}</p>
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <h1 className="text-xl font-bold text-white">{assistant.name}</h1>
+              <p className="text-zinc-400 text-sm">{assistant.description}</p>
+            </div>
+            <div className="relative">
+              <button
+                onClick={handleShare}
+                className="ml-4 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors flex items-center space-x-2"
+                title="Поделиться ссылкой на чат"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                </svg>
+                <span className="text-sm">Поделиться</span>
+              </button>
+              {shareSuccess && (
+                <div className="absolute top-full right-0 mt-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg shadow-lg">
+                  Ссылка скопирована!
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
