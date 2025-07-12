@@ -14,11 +14,18 @@ export async function GET() {
 
     // Подсчет уникальных "чатов" (комбинаций assistant_id + user_fingerprint)
     const uniqueConversations = new Set();
+    const uniqueAssistants = new Set();
+    const uniqueUsers = new Set();
+    
     messagesData?.forEach(msg => {
       uniqueConversations.add(`${msg.assistant_id}-${msg.user_fingerprint}`);
+      uniqueAssistants.add(msg.assistant_id);
+      uniqueUsers.add(msg.user_fingerprint);
     });
 
     const totalConversations = uniqueConversations.size;
+    const totalAssistants = uniqueAssistants.size;
+    const totalUsers = uniqueUsers.size;
     const totalMessages = messagesData?.length || 0;
     
     const userMessages = messagesData?.filter(msg => msg.role === 'user') || [];
@@ -56,29 +63,32 @@ export async function GET() {
     }
 
     // Топ активных разговоров (assistant_id + user_fingerprint)
-    const conversationActivity: Record<string, number> = {};
+    const conversationActivity: Record<string, { assistantId: string; userFingerprint: string; count: number }> = {};
     messagesData?.forEach(msg => {
-      const conversationKey = `${msg.assistant_id}-${msg.user_fingerprint}`;
+      const conversationKey = `${msg.assistant_id}|||${msg.user_fingerprint}`; // Используем ||| как разделитель
       if (!conversationActivity[conversationKey]) {
-        conversationActivity[conversationKey] = 0;
+        conversationActivity[conversationKey] = {
+          assistantId: msg.assistant_id,
+          userFingerprint: msg.user_fingerprint,
+          count: 0
+        };
       }
-      conversationActivity[conversationKey]++;
+      conversationActivity[conversationKey].count++;
     });
 
-    const topConversations = Object.entries(conversationActivity)
-      .sort(([,a], [,b]) => (b as number) - (a as number))
+    const topConversations = Object.values(conversationActivity)
+      .sort((a, b) => b.count - a.count)
       .slice(0, 10)
-      .map(([conversationKey, messageCount]) => {
-        const [assistantId, userFingerprint] = conversationKey.split('-');
-        return {
-          assistantId,
-          userFingerprint,
-          messageCount: messageCount as number
-        };
-      });
+      .map(item => ({
+        assistantId: item.assistantId,
+        userFingerprint: item.userFingerprint,
+        messageCount: item.count
+      }));
 
     const stats = {
       overview: {
+        totalAssistants,
+        totalUsers,
         totalConversations,
         totalMessages,
         totalUserMessages: userMessages.length,

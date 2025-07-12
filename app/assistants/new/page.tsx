@@ -13,8 +13,15 @@ export default function NewAssistantPage() {
       const err = await response.text();
       throw new Error("Ошибка создания ассистента: " + err);
     }
-    const { id } = await response.json();
-    window.location.href = `/assistants/${id}`;
+    const assistant = await response.json();
+    
+    // Сохраняем данные созданного ассистента в localStorage
+    localStorage.setItem(`assistant_${assistant.id}`, JSON.stringify({
+      ...data,
+      id: assistant.id
+    }));
+    
+    window.location.href = `/assistants/${assistant.id}`;
   }
 
   return (

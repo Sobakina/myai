@@ -35,7 +35,6 @@ export async function GET(req: NextRequest) {
     const assistantGroups: Record<string, {
       assistantId: string;
       assistantName: string;
-      conversationCount: number;
       userCount: number;
       totalMessages: number;
       totalTokens: number;
@@ -59,7 +58,6 @@ export async function GET(req: NextRequest) {
         assistantGroups[assistantId] = {
           assistantId,
           assistantName,
-          conversationCount: 0,
           userCount: 0,
           totalMessages: 0,
           totalTokens: 0,
@@ -107,10 +105,9 @@ export async function GET(req: NextRequest) {
       assistantGroups[assistantId].users[fingerprint].totalTokens += messageTokens;
     }
 
-    // Подсчитываем количество уникальных пользователей и разговоров для каждого ассистента
+    // Подсчитываем количество уникальных пользователей для каждого ассистента
     Object.keys(assistantGroups).forEach(assistantId => {
       assistantGroups[assistantId].userCount = Object.keys(assistantGroups[assistantId].users).length;
-      assistantGroups[assistantId].conversationCount = Object.keys(assistantGroups[assistantId].users).length;
     });
 
     // Преобразуем в массив и применяем поиск

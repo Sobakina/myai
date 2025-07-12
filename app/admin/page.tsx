@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 interface AdminStats {
   overview: {
+    totalAssistants: number;
+    totalUsers: number;
     totalConversations: number;
     totalMessages: number;
     totalUserMessages: number;
@@ -43,7 +45,6 @@ interface User {
 interface Assistant {
   assistantId: string;
   assistantName: string;
-  conversationCount: number;
   userCount: number;
   totalMessages: number;
   totalTokens: number;
@@ -61,7 +62,6 @@ interface Assistant {
 interface AssistantDetails {
   assistantStats: {
     assistantName: string;
-    totalConversations: number;
     totalUsers: number;
     totalMessages: number;
     totalUserMessages: number;
@@ -374,7 +374,15 @@ export default function AdminPage() {
             </div>
 
             {/* Общая статистика */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              <div className="bg-zinc-800 p-6 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">Всего ассистентов</h3>
+                <p className="text-3xl font-bold text-green-400">{stats.overview.totalAssistants}</p>
+              </div>
+              <div className="bg-zinc-800 p-6 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">Всего пользователей</h3>
+                <p className="text-3xl font-bold text-purple-400">{stats.overview.totalUsers}</p>
+              </div>
               <div className="bg-zinc-800 p-6 rounded-lg">
                 <h3 className="text-lg font-semibold mb-2">Всего разговоров</h3>
                 <p className="text-3xl font-bold text-blue-400">{stats.overview.totalConversations}</p>
@@ -431,7 +439,7 @@ export default function AdminPage() {
                 <h3 className="text-xl font-semibold mb-4">Топ активных разговоров</h3>
                 <div className="space-y-2">
                   {stats.topConversations.slice(0, 8).map((conversation, index) => (
-                    <div key={`${conversation.assistantId}-${conversation.userFingerprint}`} className="flex justify-between items-center">
+                    <div key={`conversation-${index}-${conversation.assistantId}-${conversation.userFingerprint}`} className="flex justify-between items-center">
                       <span className="text-zinc-300">
                         #{index + 1} {conversation.assistantId.slice(0, 8)}... / {conversation.userFingerprint.slice(0, 4)}...
                       </span>
@@ -513,7 +521,6 @@ export default function AdminPage() {
                 <thead className="bg-zinc-700">
                   <tr>
                     <th className="text-left p-4">Ассистент</th>
-                    <th className="text-left p-4">Разговоров</th>
                     <th className="text-left p-4">Пользователей</th>
                     <th className="text-left p-4">Сообщений</th>
                     <th className="text-left p-4">Токенов</th>
@@ -526,9 +533,8 @@ export default function AdminPage() {
                   {assistants
                     .sort((a, b) => new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime())
                     .map((assistant) => (
-                    <tr key={assistant.assistantName} className="border-t border-zinc-600 hover:bg-zinc-700">
+                    <tr key={assistant.assistantId || assistant.assistantName} className="border-t border-zinc-600 hover:bg-zinc-700">
                       <td className="p-4 font-semibold">{assistant.assistantName}</td>
-                      <td className="p-4">{assistant.conversationCount}</td>
                       <td className="p-4">{assistant.userCount}</td>
                       <td className="p-4">{assistant.totalMessages}</td>
                       <td className="p-4">{assistant.totalTokens.toLocaleString()}</td>
@@ -607,7 +613,7 @@ export default function AdminPage() {
               <table className="w-full">
                 <thead className="bg-zinc-700">
                   <tr>
-                    <th className="text-left p-4">Fingerprint</th>
+                    <th className="text-left p-4">Пользователь</th>
                     <th className="text-left p-4">Разговоров</th>
                     <th className="text-left p-4">Сообщений</th>
                     <th className="text-left p-4">Токенов</th>
@@ -721,7 +727,7 @@ export default function AdminPage() {
               <h3 className="text-xl font-bold mb-4">Ассистенты с которыми общался пользователь ({selectedUser.assistants.length})</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {selectedUser.assistants.map((assistant) => (
-                  <div key={assistant.assistantName} className="bg-zinc-700 p-4 rounded-lg hover:bg-zinc-600 transition-colors cursor-pointer"
+                  <div key={assistant.assistantId || assistant.assistantName} className="bg-zinc-700 p-4 rounded-lg hover:bg-zinc-600 transition-colors cursor-pointer"
                        onClick={() => {
                          setSelectedUserAssistant(assistant);
                          setCurrentView('user-assistant-detail');
@@ -832,11 +838,7 @@ export default function AdminPage() {
             {/* Информация об ассистенте */}
             <div className="bg-zinc-800 p-6 rounded-lg mb-6">
               <h2 className="text-2xl font-bold mb-4">Ассистент {selectedAssistant.assistantStats.assistantName}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-sm text-zinc-400">Всего разговоров</p>
-                  <p className="text-lg font-bold">{selectedAssistant.assistantStats.totalConversations}</p>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-sm text-zinc-400">Пользователей</p>
                   <p className="text-lg font-bold">{selectedAssistant.assistantStats.totalUsers}</p>

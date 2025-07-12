@@ -17,7 +17,10 @@ export type Message = {
 };
 
 interface ChatInterfaceProps {
-  assistant: AssistantFormValues;
+  assistant: AssistantFormValues & {
+    systemPrompt?: string;
+    system_prompt?: string; // для совместимости с БД
+  };
   assistantId: string;
   userFingerprint: string;
   chatId?: string; // deprecated, kept for backward compatibility
@@ -59,8 +62,15 @@ export function ChatInterface({ assistant, assistantId, userFingerprint, chatId 
     
     setIsInitializing(true);
     try {
+      console.log('Initializing chat for:', { assistantId, userFingerprint });
+      
       // Загружаем существующие сообщения
       const response = await fetch(`/api/assistants/${assistantId}/${userFingerprint}`);
+      
+      console.log('Messages API response:', { 
+        status: response.status, 
+        ok: response.ok 
+      });
       
       if (response.ok) {
         const chatMessages = await response.json();
@@ -107,11 +117,18 @@ export function ChatInterface({ assistant, assistantId, userFingerprint, chatId 
     }
   }, [assistant.name, assistant.description, assistantId, userFingerprint]);
 
+  // Сбрасываем состояние при смене ассистента или пользователя
   useEffect(() => {
-    if (!isInitialized && !isInitializing) {
+    setIsInitialized(false);
+    setIsInitializing(false);
+    setMessages([]);
+  }, [assistantId, userFingerprint]);
+
+  useEffect(() => {
+    if (!isInitialized && !isInitializing && assistantId && userFingerprint) {
       initializeChat();
     }
-  }, [assistantId, userFingerprint]); // Инициализируем только при смене ассистента или пользователя
+  }, [assistantId, userFingerprint, isInitialized, isInitializing, initializeChat]);
 
 
   const saveMessage = async (message: Message) => {
@@ -156,13 +173,19 @@ export function ChatInterface({ assistant, assistantId, userFingerprint, chatId 
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
+    console.log('Assistant data:', {
+      systemPrompt: assistant.systemPrompt,
+      system_prompt: assistant.system_prompt,
+      hasSystemPrompt: !!(assistant.systemPrompt || assistant.system_prompt)
+    });
+
     const userMessage: Message = {
       id: Date.now().toString(),
       content: inputValue,
       role: 'user',
       timestamp: new Date(),
       tokenCount: countTokens(inputValue),
-      systemPromptTokens: countTokens(assistant.systemPrompt),
+      systemPromptTokens: countTokens(assistant.systemPrompt || assistant.system_prompt || ''),
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -186,10 +209,26 @@ export function ChatInterface({ assistant, assistantId, userFingerprint, chatId 
       const realMessages = messages.filter(msg => msg.id !== 'welcome-ui-only');
       const allMessages = [...realMessages, userMessage];
       const recentMessages = allMessages.slice(-5);
+      
+      // Если у пользователя нет предыдущих сообщений (новый разговор), 
+      // отправляем только текущее сообщение пользователя
       const apiMessages = recentMessages.map(msg => ({
         role: msg.role,
         content: msg.content
       }));
+      
+      console.log('Sending to API:', { 
+        realMessagesCount: realMessages.length,
+        apiMessagesCount: apiMessages.length,
+        apiMessages: apiMessages
+      });
+      
+      // Убеждаемся, что есть хотя бы одно сообщение пользователя
+      if (apiMessages.length === 0 || !apiMessages.some(msg => msg.role === 'user')) {
+        console.error('No user messages to send to API');
+        setIsLoading(false);
+        return;
+      }
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -198,7 +237,7 @@ export function ChatInterface({ assistant, assistantId, userFingerprint, chatId 
         },
         body: JSON.stringify({
           messages: apiMessages,
-          systemPrompt: assistant.systemPrompt
+          systemPrompt: assistant.systemPrompt || assistant.system_prompt || 'Ты полезный ИИ-ассистент.'
         }),
       });
 

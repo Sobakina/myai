@@ -13,10 +13,12 @@ export type AssistantFormValues = {
 export function AssistantForm({ onSubmit }: { onSubmit: (data: AssistantFormValues) => void }) {
   const { register, handleSubmit, formState } = useForm<AssistantFormValues>();
 
-  const handleFormSubmit = (data: AssistantFormValues) => {
-    // Сохраняем данные ассистента в localStorage перед вызовом onSubmit
-    localStorage.setItem('currentAssistant', JSON.stringify(data));
-    onSubmit(data);
+  const handleFormSubmit = async (data: AssistantFormValues) => {
+    try {
+      await onSubmit(data);
+    } catch (error) {
+      console.error('Error creating assistant:', error);
+    }
   };
 
   return (
