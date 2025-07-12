@@ -36,29 +36,36 @@ export async function POST(request: NextRequest) {
 
     console.log('Chat request:', { 
       messagesCount: messages.length, 
-      systemPrompt: systemPrompt?.substring(0, 100) + '...',
-      systemPromptTokens: Math.ceil((systemPrompt?.length || 0) / 4),
+      hasSystemPrompt: !!(systemPrompt && systemPrompt.trim()),
+      systemPrompt: systemPrompt ? systemPrompt.substring(0, 100) + '...' : 'none',
+      systemPromptTokens: (systemPrompt && systemPrompt.trim()) ? Math.ceil(systemPrompt.trim().length / 4) : 0,
       apiKeyExists: !!process.env.OPENAI_API_KEY,
       userMessages: messages.filter((msg: { role: string }) => msg.role === 'user').length
     });
 
-    // Убеждаемся, что systemPrompt не null/undefined
-    const validSystemPrompt = systemPrompt || 'Ты полезный ИИ-ассистент.';
+    // Формируем массив сообщений
+    const chatMessages = [];
+    
+    // Добавляем системное сообщение только если systemPrompt задан
+    if (systemPrompt && systemPrompt.trim()) {
+      chatMessages.push({ role: 'system', content: systemPrompt.trim() });
+    }
+    
+    // Добавляем сообщения пользователя
+    chatMessages.push(...messages.map((msg: { role: string; content?: string }) => ({
+      role: msg.role,
+      content: msg.content || ''
+    })));
     
     console.log('Creating OpenAI request with:', {
-      systemPrompt: validSystemPrompt.substring(0, 50) + '...',
+      hasSystemPrompt: !!(systemPrompt && systemPrompt.trim()),
+      systemPrompt: systemPrompt ? systemPrompt.substring(0, 50) + '...' : 'none',
       messagesPreview: messages.map((m: { role: string; content?: string }) => ({ role: m.role, contentLength: m.content?.length || 0 }))
     });
 
     const stream = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: validSystemPrompt },
-        ...messages.map((msg: { role: string; content?: string }) => ({
-          role: msg.role,
-          content: msg.content || ''
-        }))
-      ],
+      messages: chatMessages,
       temperature: 0.7,
       max_tokens: 1000,
       stream: true,
@@ -71,7 +78,7 @@ export async function POST(request: NextRequest) {
     let inputTokens = 0;
     
     // Примерно подсчитываем токены system prompt + user message
-    const systemPromptTokens = Math.ceil((systemPrompt?.length || 0) / 4);
+    const systemPromptTokens = (systemPrompt && systemPrompt.trim()) ? Math.ceil(systemPrompt.trim().length / 4) : 0;
     const userMessageTokens = Math.ceil((messages[messages.length - 1]?.content?.length || 0) / 4);
     inputTokens = systemPromptTokens + userMessageTokens;
     

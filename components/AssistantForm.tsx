@@ -1,17 +1,21 @@
 'use client';
 
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 export type AssistantFormValues = {
   name: string;
   description: string;
-  systemPrompt: string;
+  systemPrompt?: string;
 };
 
 
 export function AssistantForm({ onSubmit }: { onSubmit: (data: AssistantFormValues) => void }) {
-  const { register, handleSubmit, formState } = useForm<AssistantFormValues>();
+  const { register, handleSubmit, formState, watch } = useForm<AssistantFormValues>();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Следим за изменениями в поле systemPrompt
+  const systemPromptValue = watch('systemPrompt');
 
   const handleFormSubmit = async (data: AssistantFormValues) => {
     try {
@@ -20,6 +24,36 @@ export function AssistantForm({ onSubmit }: { onSubmit: (data: AssistantFormValu
       console.error('Error creating assistant:', error);
     }
   };
+
+  // Функция для автоматического изменения размера textarea
+  const autoResize = (textarea: HTMLTextAreaElement) => {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.max(60, textarea.scrollHeight) + 'px';
+  };
+
+  // Эффект для изменения размера при изменении содержимого
+  useEffect(() => {
+    if (textareaRef.current) {
+      autoResize(textareaRef.current);
+    }
+  }, [systemPromptValue]);
+
+  // Эффект для установки начальной высоты с учетом placeholder
+  useEffect(() => {
+    if (textareaRef.current) {
+      // Временно устанавливаем placeholder как value для расчета высоты
+      const originalValue = textareaRef.current.value;
+      const placeholder = textareaRef.current.placeholder;
+      
+      if (!originalValue && placeholder) {
+        textareaRef.current.value = placeholder;
+        autoResize(textareaRef.current);
+        textareaRef.current.value = originalValue;
+      } else {
+        autoResize(textareaRef.current);
+      }
+    }
+  }, []);
 
   return (
     <form
@@ -44,11 +78,13 @@ export function AssistantForm({ onSubmit }: { onSubmit: (data: AssistantFormValu
         />
       </div>
       <div>
-        <label className="block font-semibold mb-1 text-zinc-400">System Prompt</label>
+        <label className="block font-semibold mb-1 text-zinc-400">System Prompt (необязательно)</label>
         <textarea
-          {...register("systemPrompt", { required: true })}
-          className="w-full p-2 rounded-xl border shadow min-h-[60px] text-zinc-400 placeholder-zinc-400"
-          placeholder="Как должен вести себя этот ассистент?"
+          {...register("systemPrompt")}
+          ref={textareaRef}
+          className="w-full p-2 rounded-xl border shadow min-h-[60px] text-zinc-400 placeholder-zinc-400 resize-none overflow-hidden"
+          placeholder="Как должен вести себя этот ассистент? (оставьте пустым для стандартного поведения)"
+          onInput={(e) => autoResize(e.target as HTMLTextAreaElement)}
         />
       </div>
       <button

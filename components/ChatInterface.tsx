@@ -235,7 +235,7 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
         },
         body: JSON.stringify({
           messages: apiMessages,
-          systemPrompt: assistant.systemPrompt || assistant.system_prompt || 'Ты полезный ИИ-ассистент.'
+          systemPrompt: assistant.systemPrompt || assistant.system_prompt
         }),
       });
 
