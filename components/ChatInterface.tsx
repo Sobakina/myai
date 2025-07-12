@@ -31,6 +31,8 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const {
@@ -46,24 +48,50 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleShare = async () => {
+  const handleShare = () => {
+    setShowShareModal(true);
+  };
+
+  const handleShareConfirm = async () => {
     try {
-      const shareUrl = `${window.location.origin}/assistants/${assistantId}`;
+      let shareUrl = `${window.location.origin}/assistants/${assistantId}`;
+      
+      // Если есть приветственное сообщение, добавляем его в URL
+      if (shareMessage.trim()) {
+        const encodedMessage = encodeURIComponent(shareMessage.trim());
+        shareUrl += `?welcome=${encodedMessage}`;
+      }
+      
       await navigator.clipboard.writeText(shareUrl);
       setShareSuccess(true);
       setTimeout(() => setShareSuccess(false), 2000);
+      setShowShareModal(false);
+      setShareMessage('');
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
       // Fallback для старых браузеров
+      let shareUrl = `${window.location.origin}/assistants/${assistantId}`;
+      if (shareMessage.trim()) {
+        const encodedMessage = encodeURIComponent(shareMessage.trim());
+        shareUrl += `?welcome=${encodedMessage}`;
+      }
+      
       const textArea = document.createElement('textarea');
-      textArea.value = `${window.location.origin}/assistants/${assistantId}`;
+      textArea.value = shareUrl;
       document.body.appendChild(textArea);
       textArea.select();
       document.execCommand('copy');
       document.body.removeChild(textArea);
       setShareSuccess(true);
       setTimeout(() => setShareSuccess(false), 2000);
+      setShowShareModal(false);
+      setShareMessage('');
     }
+  };
+
+  const handleShareCancel = () => {
+    setShowShareModal(false);
+    setShareMessage('');
   };
 
   useEffect(() => {
@@ -424,6 +452,12 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
               <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSubmit(e as any);
+                  }
+                }}
                 placeholder="Пишите или нажмите на микрофон..."
                 className="w-full bg-zinc-800 text-white placeholder-zinc-400 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[48px] max-h-[200px] overflow-y-auto"
                 disabled={isLoading}
@@ -476,6 +510,42 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
           </form>
         </div>
       </div>
+
+      {/* Модальное окно для поделиться */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-zinc-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-white mb-4">Поделиться чатом</h3>
+            <p className="text-zinc-400 text-sm mb-4">
+              Добавьте приветственное сообщение (необязательно), которое увидит получатель при открытии чата:
+            </p>
+            <textarea
+              value={shareMessage}
+              onChange={(e) => setShareMessage(e.target.value)}
+              placeholder="Например: Привет! Попробуй этого ассистента, он очень полезный..."
+              className="w-full bg-zinc-700 text-white placeholder-zinc-400 rounded-lg p-3 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              maxLength={500}
+            />
+            <div className="text-xs text-zinc-500 mb-4">
+              {shareMessage.length}/500 символов
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleShareCancel}
+                className="flex-1 bg-zinc-600 hover:bg-zinc-500 text-white py-2 rounded-lg transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleShareConfirm}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition-colors"
+              >
+                Скопировать ссылку
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

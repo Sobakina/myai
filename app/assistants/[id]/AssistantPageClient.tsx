@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ChatInterface } from '@/components/ChatInterface';
 import { AssistantFormValues } from '@/components/AssistantForm';
 import { getUserFingerprint } from '@/lib/fingerprint';
@@ -11,9 +12,21 @@ interface AssistantPageClientProps {
 }
 
 export default function AssistantPageClient({ assistantId, initialAssistantData }: AssistantPageClientProps) {
+  const searchParams = useSearchParams();
   const [assistant, setAssistant] = useState<AssistantFormValues & { id: string } | null>(null);
   const [userFingerprint, setUserFingerprint] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
+
+  // Обработка URL параметра welcome
+  useEffect(() => {
+    const welcomeParam = searchParams.get('welcome');
+    if (welcomeParam) {
+      setWelcomeMessage(decodeURIComponent(welcomeParam));
+      // Очищаем URL от параметра после получения
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     async function loadAssistantAndFingerprint() {
@@ -68,6 +81,42 @@ export default function AssistantPageClient({ assistantId, initialAssistantData 
 
     loadAssistantAndFingerprint();
   }, [assistantId, initialAssistantData]);
+
+  // Сохраняем приветственное сообщение когда все данные загружены
+  useEffect(() => {
+    async function saveWelcomeMessage() {
+      if (welcomeMessage && userFingerprint && assistantId) {
+        try {
+          const response = await fetch('/api/welcome-message', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              assistantId,
+              userFingerprint,
+              welcomeMessage
+            }),
+          });
+
+          if (response.ok) {
+            console.log('Welcome message saved successfully');
+            // Очищаем welcomeMessage после сохранения
+            setWelcomeMessage(null);
+            // Принудительно обновляем страницу чтобы новое сообщение появилось
+            window.location.reload();
+          } else {
+            const errorData = await response.text();
+            console.error('Failed to save welcome message:', response.status, errorData);
+          }
+        } catch (error) {
+          console.error('Error saving welcome message:', error);
+        }
+      }
+    }
+
+    saveWelcomeMessage();
+  }, [welcomeMessage, userFingerprint, assistantId]);
 
   if (isLoading) {
     return (
