@@ -11,11 +11,9 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
 
     // Получаем все сообщения для группировки по пользователям
-    let query = supabase
+    const { data: allMessages, error } = await supabase
       .from('messages')
       .select('user_fingerprint, assistant_id, created_at, token_count, system_prompt_tokens');
-
-    const { data: allMessages, error } = await query;
 
     if (error) {
       return NextResponse.json({ error }, { status: 400 });

@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Проверяем, что есть хотя бы одно сообщение пользователя
-    const hasUserMessage = messages.some((msg: any) => msg.role === 'user');
+    const hasUserMessage = messages.some((msg: { role: string }) => msg.role === 'user');
     if (!hasUserMessage) {
       return Response.json({ 
         error: 'Требуется хотя бы одно сообщение пользователя', 
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       systemPrompt: systemPrompt?.substring(0, 100) + '...',
       systemPromptTokens: Math.ceil((systemPrompt?.length || 0) / 4),
       apiKeyExists: !!process.env.OPENAI_API_KEY,
-      userMessages: messages.filter((msg: any) => msg.role === 'user').length
+      userMessages: messages.filter((msg: { role: string }) => msg.role === 'user').length
     });
 
     // Убеждаемся, что systemPrompt не null/undefined
@@ -47,14 +47,14 @@ export async function POST(request: NextRequest) {
     
     console.log('Creating OpenAI request with:', {
       systemPrompt: validSystemPrompt.substring(0, 50) + '...',
-      messagesPreview: messages.map((m: any) => ({ role: m.role, contentLength: m.content?.length || 0 }))
+      messagesPreview: messages.map((m: { role: string; content?: string }) => ({ role: m.role, contentLength: m.content?.length || 0 }))
     });
 
     const stream = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: validSystemPrompt },
-        ...messages.map((msg: any) => ({
+        ...messages.map((msg: { role: string; content?: string }) => ({
           role: msg.role,
           content: msg.content || ''
         }))

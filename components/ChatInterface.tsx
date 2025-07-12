@@ -5,7 +5,6 @@ import { AssistantFormValues } from './AssistantForm';
 import { countTokens } from '@/lib/tokenCounter';
 import { calculateCost, formatCost } from '@/lib/pricing';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
-import { getUserFingerprint } from '@/lib/fingerprint';
 
 export type Message = {
   id: string;
@@ -23,10 +22,9 @@ interface ChatInterfaceProps {
   };
   assistantId: string;
   userFingerprint: string;
-  chatId?: string; // deprecated, kept for backward compatibility
 }
 
-export function ChatInterface({ assistant, assistantId, userFingerprint, chatId }: ChatInterfaceProps) {
+export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -115,7 +113,7 @@ export function ChatInterface({ assistant, assistantId, userFingerprint, chatId 
     } finally {
       setIsInitializing(false);
     }
-  }, [assistant.name, assistant.description, assistantId, userFingerprint]);
+  }, [assistant.name, assistant.description, assistantId, userFingerprint, isInitialized, isInitializing]);
 
   // Сбрасываем состояние при смене ассистента или пользователя
   useEffect(() => {
