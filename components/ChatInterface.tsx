@@ -338,8 +338,8 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="max-w-4xl mx-auto space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        <div className="max-w-2xl mx-auto space-y-4">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -348,7 +348,7 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
               }`}
             >
               <div
-                className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
+                className={`max-w-xs lg:max-w-sm px-4 py-3 rounded-2xl ${
                   message.role === 'user'
                     ? 'bg-blue-600 text-white'
                     : 'bg-zinc-800 text-zinc-100'
@@ -385,7 +385,7 @@ export function ChatInterface({ assistant, assistantId, userFingerprint }: ChatI
       </div>
 
       <div className="bg-zinc-900 border-t border-zinc-800 p-4">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-2xl mx-auto">
           {speechError && (
             <div className="mb-2 text-red-400 text-sm text-center">
               {speechError}

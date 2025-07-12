@@ -795,16 +795,17 @@ export default function AdminPage() {
             </div>
 
             {/* Лента сообщений */}
-            <div className="bg-zinc-800 p-6 rounded-lg">
-              <h3 className="text-xl font-bold mb-4">Сообщения ({selectedUserAssistant.messages.length})</h3>
-              <div className="space-y-4 max-h-96 overflow-y-auto">
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-zinc-800 rounded-lg">
+                <h3 className="text-xl font-bold mb-4 pt-6 mx-6">Сообщения ({selectedUserAssistant.messages.length})</h3>
+                <div className="space-y-4 max-h-96 overflow-y-auto pb-6 mx-6 custom-scrollbar">
                 {selectedUserAssistant.messages.map((message) => (
                   <div
                     key={message.id}
                     className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-xs lg:max-w-md p-4 rounded-lg ${
+                      className={`max-w-xs lg:max-w-sm p-4 rounded-lg ${
                         message.role === 'user' 
                           ? 'bg-blue-900/30 border-l-4 border-blue-500' 
                           : 'bg-green-900/30 border-l-4 border-green-500'
@@ -827,6 +828,7 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </div>
           </div>
@@ -961,16 +963,17 @@ export default function AdminPage() {
             </div>
 
             {/* Объединенная лента сообщений */}
-            <div className="bg-zinc-800 p-6 rounded-lg">
-              <h3 className="text-xl font-bold mb-4">Все сообщения пользователя ({selectedAssistantUser.messages.length})</h3>
-              <div className="space-y-4 max-h-96 overflow-y-auto">
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-zinc-800 rounded-lg">
+                <h3 className="text-xl font-bold mb-4 pt-6 mx-6">Все сообщения пользователя ({selectedAssistantUser.messages.length})</h3>
+                <div className="space-y-4 max-h-96 overflow-y-auto pb-6 mx-6 custom-scrollbar">
                 {selectedAssistantUser.messages.map((message) => (
                   <div
                     key={message.id}
                     className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-xs lg:max-w-md p-4 rounded-lg ${
+                      className={`max-w-xs lg:max-w-sm p-4 rounded-lg ${
                         message.role === 'user' 
                           ? 'bg-blue-900/30 border-l-4 border-blue-500' 
                           : 'bg-green-900/30 border-l-4 border-green-500'
@@ -993,6 +996,7 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </div>
           </div>
